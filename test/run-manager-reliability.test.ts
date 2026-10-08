@@ -35,9 +35,9 @@ function fixture() {
 	const pi = {
 		on: () => () => {},
 		appendEntry: (type: string, data: unknown) => session.appendCustomEntry(type, data),
-		sendUserMessage: (message: any) => {
+		sendMessage: (message: any) => {
 			messages.push(message);
-			if (idle) session.appendMessage({ role: "user", content: message, timestamp: Date.now() });
+			if (idle) session.appendCustomMessageEntry(message.customType, message.content, message.display, message.details);
 			else queued.push(message);
 		},
 		exec: async (_command: string, args: string[]) => ({ code: 0, killed: false, stderr: "", stdout: args[1] === "create" ? JSON.stringify({ tab: { tab_id: "tab" }, root_pane: { pane_id: "pane" } }) : "{}" }),
@@ -59,7 +59,7 @@ function fixture() {
 	};
 	return { pi, ctx, manager, profile, session, messages, warnings, open,
 		idle: (value: boolean) => { idle = value; },
-		receiveNext: () => { const message = queued.shift(); if (message) session.appendMessage({ role: "user", content: message, timestamp: Date.now() }); },
+		receiveNext: () => { const message = queued.shift(); if (message) session.appendCustomMessageEntry(message.customType, message.content, message.display, message.details); },
 	};
 }
 
@@ -76,12 +76,12 @@ test("retains final messages after manual closure until the busy Main receives t
 	assert.equal(f.messages.length, 2, "Both messages enter Pi\'s queue while Main is busy");
 	f.receiveNext();
 	f.manager.start(f.ctx);
-	assert.ok(f.messages[0].includes("First final message"));
-	assert.match(f.messages[0], /already closed/);
+	assert.ok(f.messages[0].content.includes("First final message"));
+	assert.match(f.messages[0].content, /already closed/);
 	assert.ok(fs.existsSync(run.channelDir));
 	f.receiveNext();
 	f.manager.start(f.ctx);
-	assert.ok(f.messages[1].includes("Second final message"));
+	assert.ok(f.messages[1].content.includes("Second final message"));
 	f.manager.start(f.ctx);
 	assert.equal(fs.existsSync(run.channelDir), false);
 	assert.equal(f.messages.length, 2);
@@ -93,12 +93,12 @@ test("does not remove an asynchronously submitted delivery before it appears in 
 	talkToMain(run.channelDir, manifest, "Delayed receipt");
 	let submitted: any;
 	let count = 0;
-	f.pi.sendUserMessage = (message) => { submitted = message; count++; f.idle(false); };
+	f.pi.sendMessage = (message) => { submitted = message; count++; f.idle(false); };
 	f.manager.start(f.ctx);
 	assert.equal(listTalkToMain(run.channelDir, manifest).length, 1);
 	f.manager.start(f.ctx);
 	assert.equal(count, 1);
-	f.session.appendMessage({ role: "user", content: submitted, timestamp: Date.now() });
+	f.session.appendCustomMessageEntry(submitted.customType, submitted.content, submitted.display, submitted.details);
 	f.manager.start(f.ctx);
 	assert.deepEqual(listTalkToMain(run.channelDir, manifest), []);
 	assert.equal(count, 1);
@@ -108,12 +108,12 @@ test("a failed delivery remains retryable without being marked as seen", () => {
 	const f = fixture();
 	const { run, manifest } = f.open();
 	talkToMain(run.channelDir, manifest, "Retry me");
-	const send = f.pi.sendUserMessage;
-	f.pi.sendUserMessage = () => { throw new Error("Cannot submit"); };
+	const send = f.pi.sendMessage;
+	f.pi.sendMessage = () => { throw new Error("Cannot submit"); };
 	f.manager.start(f.ctx);
 	assert.equal(listTalkToMain(run.channelDir, manifest).length, 1);
 	assert.equal(f.warnings.length, 1);
-	f.pi.sendUserMessage = send;
+	f.pi.sendMessage = send;
 	f.manager.start(f.ctx);
 	assert.deepEqual(listTalkToMain(run.channelDir, manifest), []);
 	assert.equal(f.messages.length, 1);
@@ -127,13 +127,13 @@ test("a corrupt channel is reported once without blocking another Sub", () => {
 	talkToMain(healthy.run.channelDir, healthy.manifest, "Healthy delivery");
 	f.manager.start(f.ctx);
 	assert.equal(f.warnings.length, 1);
-	assert.ok(f.messages[0].includes("Healthy delivery"));
+	assert.ok(f.messages[0].content.includes("Healthy delivery"));
 	f.manager.start(f.ctx);
 	assert.equal(f.warnings.length, 1);
 	fs.rmSync(path.join(broken.run.channelDir, "to-main", "bad.json"));
 	talkToMain(broken.run.channelDir, broken.manifest, "Recovered");
 	f.manager.start(f.ctx);
-	assert.ok(f.messages[1].includes("Recovered"));
+	assert.ok(f.messages[1].content.includes("Recovered"));
 });
 
 test("a failed Herdr close retains the run and channel for retry", async () => {
@@ -216,7 +216,7 @@ test("startup failure still retains queued Sub diagnostics after successful roll
 	f.receiveNext();
 	f.idle(true);
 	f.manager.start(f.ctx);
-	assert.ok(f.messages[0].includes("Startup diagnostics"));
+	assert.ok(f.messages[0].content.includes("Startup diagnostics"));
 	f.manager.start(f.ctx);
 	assert.equal(fs.existsSync(failedRun!.channelDir), false);
 });
@@ -265,7 +265,7 @@ test("channel closure markers survive a failed close-state snapshot write", asyn
 	f.receiveNext();
 	restored.start(f.ctx);
 	assert.equal(restored.runs.size, 0);
-	assert.ok(f.messages[0].includes("Retained result"));
+	assert.ok(f.messages[0].content.includes("Retained result"));
 	restored.start(f.ctx);
 	assert.equal(fs.existsSync(run.channelDir), false);
 });

@@ -111,22 +111,30 @@ test("shutdown cancels pending scans and closes all watchers without stale callb
 	} finally { f.monitor.stop(); }
 });
 
-test("native filesystem watching observes atomic rename without waiting for fallback", async (t) => {
+test("native filesystem integration observes atomic rename through notification or fallback", async () => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-watch-"));
 	fs.mkdirSync(path.join(root, "to-main"));
+	const message = path.join(root, "to-main", "message.json");
+	const payload = { text: "delivered" };
 	const batches: string[][] = [];
-	const errors: unknown[] = [];
-	const monitor = new ChannelMonitor((ids) => batches.push(ids), (_id, error) => errors.push(error));
+	let received: unknown;
+	const monitor = new ChannelMonitor((ids) => {
+		batches.push(ids);
+		if (fs.existsSync(message)) received = JSON.parse(fs.readFileSync(message, "utf8"));
+	}, () => {});
 	monitor.add("run", root, "to-main");
 	monitor.start();
 	try {
-		if (errors.length > 0) { t.skip("Native filesystem watching is unavailable"); return; }
-		const temporary = path.join(root, "to-main", "message.json.tmp");
-		fs.writeFileSync(temporary, "{}");
-		fs.renameSync(temporary, path.join(root, "to-main", "message.json"));
-		const deadline = Date.now() + 2000;
-		while (batches.length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
-		assert.deepEqual(batches, [["run"]]);
-		assert.deepEqual(errors, []);
+		const temporary = `${message}.tmp`;
+		fs.writeFileSync(temporary, JSON.stringify(payload));
+		fs.renameSync(temporary, message);
+		// fs.watch is best-effort: macOS can miss this immediate write under
+		// parallel test load. Verify actual delivery even without notifications;
+		// the fake-watch tests above cover debounce timing deterministically.
+		const deadline = Date.now() + CHANNEL_RESCAN_MS + CHANNEL_DEBOUNCE_MS + 2000;
+		while (received === undefined && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+		assert.deepEqual(received, payload);
+		assert.ok(batches.length > 0);
+		assert.ok(batches.every((ids) => ids.length === 1 && ids[0] === "run"));
 	} finally { monitor.stop(); fs.rmSync(root, { recursive: true, force: true }); }
 });

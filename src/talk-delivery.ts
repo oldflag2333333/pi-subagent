@@ -1,12 +1,12 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { MESSAGE_TYPE, removeTalk, type TalkDirection } from "./channel.js";
 import type { DelegateManifest, TalkMessage } from "./types.js";
-import { formatTalkInput, readTalkReceipt } from "./talk-message.js";
+import { readTalkReceipt } from "./talk-message.js";
 import { canUseNativeQueue, forgetTalk, markTalkQueued, rememberTalk } from "./inbox-state.js";
 
 function hasReceipt(ctx: ExtensionContext, direction: TalkDirection, runId: string, messageId: string): boolean {
 	return ctx.sessionManager.getEntries().some((entry) => {
-		// Old custom-message receipts still count after upgrading or reloading.
+		// Accept both custom receipts and user-message receipts from v0.1.0.
 		const details = entry.type === "message" ? readTalkReceipt(entry.message)
 			: entry.type === "custom_message" && entry.customType === MESSAGE_TYPE
 				? entry.details as { direction?: string; runId?: string; messageId?: string } | undefined
@@ -15,7 +15,7 @@ function hasReceipt(ctx: ExtensionContext, direction: TalkDirection, runId: stri
 	});
 }
 
-/** pi.sendUserMessage is fire-and-forget; its return is not a session receipt. */
+/** pi.sendMessage is fire-and-forget; its return is not a session receipt. */
 export function deliverTalk(
 	pi: ExtensionAPI,
 	ctx: ExtensionContext,
@@ -37,11 +37,14 @@ export function deliverTalk(
 	try {
 		// Pi owns waiting behind current work, not Pi Subagent. In-flight IDs prevent
 		// repeated file notifications from submitting the same follow-up twice.
-		pi.sendUserMessage(formatTalkInput({ direction, runId: manifest.runId, messageId: message.id }, content), {
-			deliverAs: "followUp",
-			// Peer text is input, not an instruction to execute slash commands or templates.
-			expandPromptTemplates: false,
-		});
+		// Custom messages preserve inbox rendering and never execute peer text as
+		// commands. Pi owns run preparation; do not emulate input hooks here.
+		pi.sendMessage({
+			customType: MESSAGE_TYPE,
+			content,
+			display: true,
+			details: { title: manifest.title, message: message.message, direction, runId: manifest.runId, messageId: message.id },
+		}, { deliverAs: "followUp", triggerTurn: true });
 	} catch (error) {
 		pending.queued = false;
 		throw error;

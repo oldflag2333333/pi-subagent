@@ -151,6 +151,8 @@ Persistent Sub `.jsonl` files are **not deleted**; remove them manually through 
 
 ## Things to know
 
+Message delivery uses custom inbox cards. See [messaging behavior and the known Pi 1.0.4/1.1.0 limitation](docs/messaging.md).
+
 - **Herdr is required for Subs.** There is no headless fallback. Up to four Subs can be open at once, and Subs cannot delegate further.
 - **Profiles are not a sandbox.** Subs run as your OS user. A read-only role is not a filesystem permission boundary.
 - **MCP follows Pi's normal configuration.** Profiles select non-MCP tools; they do not isolate or filter MCP servers. Custom non-MCP tools must come from extensions already loaded in Main.

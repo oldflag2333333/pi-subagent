@@ -32,7 +32,7 @@ function fixture() {
 	let queued = false;
 	const warnings: string[] = [];
 	const sent: any[] = [];
-	const pi = { sendUserMessage: (message: any) => { sent.push(message); } } as unknown as ExtensionAPI;
+	const pi = { sendMessage: (message: any) => { sent.push(message); } } as unknown as ExtensionAPI;
 	const ctx = { model: {}, signal: new AbortController().signal, sessionManager: session, isIdle: () => idle, hasPendingMessages: () => queued, hasUI: true,
 		ui: { notify: (message: string) => warnings.push(message) },
 	} as unknown as ExtensionContext;
@@ -47,7 +47,7 @@ test("retains the file until a session receipt exists, then acknowledges even wh
 	f.busy();
 	assert.equal(f.send(), "waiting");
 	const accepted = f.sent[0];
-	f.session.appendMessage({ role: "user", content: accepted, timestamp: Date.now() });
+	f.session.appendCustomMessageEntry(accepted.customType, accepted.content, accepted.display, accepted.details);
 	assert.equal(f.send(), "acknowledged");
 	assert.deepEqual(listTalkToMain(f.channel.channelDir, f.manifest), []);
 	assert.equal(f.sent.length, 1);
@@ -55,10 +55,10 @@ test("retains the file until a session receipt exists, then acknowledges even wh
 
 test("keeps failed synchronous deliveries retryable and supports synchronous receipts", () => {
 	const f = fixture();
-	f.pi.sendUserMessage = () => { throw new Error("Delivery failed"); };
+	f.pi.sendMessage = () => { throw new Error("Delivery failed"); };
 	assert.throws(f.send, /Delivery failed/);
 	assert.equal(listTalkToMain(f.channel.channelDir, f.manifest).length, 1);
-	f.pi.sendUserMessage = (message) => { f.session.appendMessage({ role: "user", content: message, timestamp: Date.now() }); };
+	f.pi.sendMessage = (message) => { f.session.appendCustomMessageEntry(message.customType, message.content, message.display, message.details); };
 	assert.equal(f.send(), "sent");
 	assert.deepEqual(listTalkToMain(f.channel.channelDir, f.manifest), []);
 });

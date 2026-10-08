@@ -25,7 +25,7 @@ function fixture() {
 		signal: new AbortController().signal,
 	} as unknown as ExtensionContext;
 	const pi = { on: (event: string, handler: (...args: any[]) => unknown) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
-		sendUserMessage: (message: any) => sent.push(message),
+		sendMessage: (message: any) => sent.push(message),
 	} as unknown as ExtensionAPI;
 	let wakes = 0;
 	bindInboxEvents(pi, () => ctx, () => { wakes++; });
@@ -35,7 +35,7 @@ function fixture() {
 	return { channel, manifest, message, session, ctx, pi, sent, fire, send, wakes: () => wakes };
 }
 
-test("busy user-message follow-ups enter the native queue once before being recorded", () => {
+test("busy custom-message follow-ups enter the native queue once before being recorded", () => {
 	const f = fixture();
 	f.fire("agent_start");
 	assert.equal(f.send(), "sent");
@@ -46,21 +46,21 @@ test("busy user-message follow-ups enter the native queue once before being reco
 
 test("failed submission remains retryable", () => {
 	const f = fixture();
-	const send = f.pi.sendUserMessage;
-	f.pi.sendUserMessage = () => { throw new Error("Cannot enqueue"); };
+	const send = f.pi.sendMessage;
+	f.pi.sendMessage = () => { throw new Error("Cannot enqueue"); };
 	assert.throws(f.send, /Cannot enqueue/);
-	f.pi.sendUserMessage = send;
+	f.pi.sendMessage = send;
 	assert.equal(f.send(), "sent");
 	assert.equal(f.sent.length, 1);
 });
 
-test("receipt leaves exactly one native user-message record", () => {
+test("receipt leaves exactly one custom-message record", () => {
 	const f = fixture();
 	f.send();
 	const accepted = f.sent[0];
-	f.session.appendMessage({ role: "user", content: accepted, timestamp: Date.now() });
+	f.session.appendCustomMessageEntry(accepted.customType, accepted.content, accepted.display, accepted.details);
 	assert.equal(f.send(), "acknowledged");
-	assert.equal(f.session.getEntries().filter((entry) => entry.type === "message" && entry.message.role === "user").length, 1);
+	assert.equal(f.session.getEntries().filter((entry) => entry.type === "custom_message").length, 1);
 	assert.equal(f.sent.length, 1);
 });
 

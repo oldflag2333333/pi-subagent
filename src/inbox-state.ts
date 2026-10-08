@@ -49,8 +49,8 @@ export function forgetTalk(ctx: ExtensionContext, direction: TalkDirection, runI
 /** Queue behind streaming work, but never compete with manual compaction or prompt preflight. */
 export function canUseNativeQueue(ctx: ExtensionContext): boolean {
 	const value = state(ctx);
-	// sendUserMessage awaits input/auth hooks before Pi becomes busy. Submit only
-	// one idle prompt at a time; its receipt or agent_start will wake the rest.
+	// Serialize idle submissions until Pi starts the run or records its receipt.
+	// Once active, subsequent deliveries use Pi's native follow-up queue.
 	if (ctx.isIdle()) return ![...value.pending.values()].some((pending) => pending.queued && !pending.queuedWhileBusy);
 	return value.active || ctx.signal !== undefined;
 }
