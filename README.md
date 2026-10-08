@@ -11,7 +11,7 @@ A **profile** defines a specialist's instructions, tools, and optional skills or
 You need **Node.js 22.19+**, **[Pi](https://pi.dev) 1.0.4+**, and **Herdr**. To launch specialists, run Pi inside a Herdr workspace with the `herdr` command available.
 
 ```bash
-pi install npm:pi-subagent
+pi install npm:@oldflag2333333/pi-subagent
 ```
 
 Restart Pi or run `/reload`. Pi Subagent uses your existing Pi provider credentials; make sure Pi can already run a normal conversation.
@@ -19,7 +19,7 @@ Restart Pi or run `/reload`. Pi Subagent uses your existing Pi provider credenti
 To update later:
 
 ```bash
-pi update npm:pi-subagent
+pi update npm:@oldflag2333333/pi-subagent
 ```
 
 Restart Pi or run `/reload` after updating.

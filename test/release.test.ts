@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { publishRelease, readReleasePackage, shouldRelease, type ReleasePackage } from "../.github/scripts/release.js";
 
 const sha = "a".repeat(40);
-const pkg: ReleasePackage = { name: "pi-subagent", version: "0.6.0", tag: "v0.6.0", prerelease: false, distTag: "latest" };
+const pkg: ReleasePackage = { name: "@oldflag2333333/pi-subagent", version: "0.6.0", tag: "v0.6.0", prerelease: false, distTag: "latest" };
 const options = { repository: "oldflag2333333/pi-subagent", sha, token: "fixture-token" };
 
 test("only an increasing package version triggers a release", () => {
@@ -21,8 +21,8 @@ test("only an increasing package version triggers a release", () => {
 test("release metadata validates the lockfile and distinguishes prereleases", () => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-release-test-"));
 	const write = (version: string, lockVersion = version) => {
-		fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "pi-subagent", version }));
-		fs.writeFileSync(path.join(root, "package-lock.json"), JSON.stringify({ name: "pi-subagent", version: lockVersion, packages: { "": { name: "pi-subagent", version: lockVersion } } }));
+		fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: pkg.name, version }));
+		fs.writeFileSync(path.join(root, "package-lock.json"), JSON.stringify({ name: pkg.name, version: lockVersion, packages: { "": { name: pkg.name, version: lockVersion } } }));
 	};
 	try {
 		write("0.6.0");
@@ -55,6 +55,7 @@ function fixture(current = pkg) {
 	const fetcher: typeof fetch = async (input, init) => {
 		const url = new URL(String(input));
 		if (url.hostname === "registry.npmjs.org") {
+			assert.ok(url.pathname.startsWith(`/${encodeURIComponent(current.name)}/`));
 			if (state.registryError) return response({}, state.registryError);
 			if (url.pathname.endsWith(`/${current.version}`)) return state.published ? response(state.published) : response({}, 404);
 			assert.ok(url.pathname.endsWith(`/${current.distTag}`));

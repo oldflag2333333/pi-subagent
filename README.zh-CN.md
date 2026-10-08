@@ -11,7 +11,7 @@
 需要 **Node.js 22.19+**、**[Pi](https://pi.dev) 1.0.4+** 和 **Herdr**。启动助手时，Pi 必须运行在 Herdr 工作区中，并且能调用 `herdr` 命令。
 
 ```bash
-pi install npm:pi-subagent
+pi install npm:@oldflag2333333/pi-subagent
 ```
 
 安装后重启 Pi，或执行 `/reload`。Pi Subagent 使用 Pi 已有的模型服务凭据，请先确认 Pi 能正常对话。
@@ -19,7 +19,7 @@ pi install npm:pi-subagent
 后续更新：
 
 ```bash
-pi update npm:pi-subagent
+pi update npm:@oldflag2333333/pi-subagent
 ```
 
 更新后同样需要重启 Pi 或执行 `/reload`。
