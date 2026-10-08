@@ -1,0 +1,27 @@
+id = "facets.agent-visibility"
+name = "Facets Agent Visibility"
+version = "0.1.0"
+min_herdr_version = "0.8.2"
+description = "Hide or show Facets subs in Herdr's Agents panel"
+platforms = ["linux", "macos"]
+
+[[startup]]
+command = ["pi", "--offline", "--no-extensions", "-e", "action.ts", "--facets-visibility-action", "startup", "--list-models"]
+
+[[actions]]
+id = "toggle-subs"
+title = "Toggle Facets subs"
+contexts = ["global"]
+command = ["pi", "--offline", "--no-extensions", "-e", "action.ts", "--facets-visibility-action", "toggle", "--list-models"]
+
+[[actions]]
+id = "hide-subs"
+title = "Hide Facets subs"
+contexts = ["global"]
+command = ["pi", "--offline", "--no-extensions", "-e", "action.ts", "--facets-visibility-action", "hide", "--list-models"]
+
+[[actions]]
+id = "show-subs"
+title = "Show Facets subs"
+contexts = ["global"]
+command = ["pi", "--offline", "--no-extensions", "-e", "action.ts", "--facets-visibility-action", "show", "--list-models"]
