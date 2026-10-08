@@ -1,4 +1,4 @@
-# Facets
+# Pi Subagent
 
 [English](README.md) | 简体中文
 
@@ -11,28 +11,28 @@
 需要 **Node.js 22.19+**、**[Pi](https://pi.dev) 1.0.4+** 和 **Herdr**。启动助手时，Pi 必须运行在 Herdr 工作区中，并且能调用 `herdr` 命令。
 
 ```bash
-pi install npm:pi-facets
+pi install npm:pi-subagent
 ```
 
-安装后重启 Pi，或执行 `/reload`。Facets 使用 Pi 已有的模型服务凭据，请先确认 Pi 能正常对话。
+安装后重启 Pi，或执行 `/reload`。Pi Subagent 使用 Pi 已有的模型服务凭据，请先确认 Pi 能正常对话。
 
 后续更新：
 
 ```bash
-pi update npm:pi-facets
+pi update npm:pi-subagent
 ```
 
 更新后同样需要重启 Pi 或执行 `/reload`。
 
 ## 快速上手：代码审查助手
 
-Facets 不附带内置角色。先创建一个：
+Pi Subagent 不附带内置角色。先创建一个：
 
 ```bash
-mkdir -p ~/.pi/agent/facets/profiles/reviewer
+mkdir -p ~/.pi/agent/subagent/profiles/reviewer
 ```
 
-将以下内容保存为 `~/.pi/agent/facets/profiles/reviewer/config.json`：
+将以下内容保存为 `~/.pi/agent/subagent/profiles/reviewer/config.json`：
 
 ```json
 {
@@ -75,8 +75,11 @@ mkdir -p ~/.pi/agent/facets/profiles/reviewer
 | 查看进度 | 让 Pi 列出子助手，或打开助手的 Herdr 标签页 |
 | 停止当前任务，但保留助手会话 | 让 Pi 中断该子助手 |
 | 结束使用 | 让 Pi 关闭子助手，或手动关闭其 Herdr 标签页 |
+| 清理已删除 Main 遗留的通信文件 | `/clean-sub` |
 
 在同一个主会话（Main）中，多次调用 `/sub:reviewer` 会复用该角色已打开的子助手（Sub）。如果它正在工作，新任务会排队。任务完成后，标签页不会自动关闭。
+
+**Sub-agents（子助手）** 列表只显示当前 Main 创建的助手：**Open** 包含所有已打开的子助手，包括空闲或状态未知的；**Resumable** 包含已确认关闭、且保存文件仍存在的持久化会话。其他 Main 或分叉会话不会继承这些助手，也不能恢复它们。重载或恢复同一个 Main 则会保留关联。
 
 如果想将角色应用到当前 Pi，而不是打开子助手，可以这样启动：
 
@@ -90,8 +93,8 @@ pi --profile reviewer
 
 ### 配置放在哪里
 
-- **个人配置：** `~/.pi/agent/facets/profiles/<name>/`
-- **项目配置：** 项目或其上级目录中的 `.pi/facets/profiles/<name>/`，仅在项目信任后加载。
+- **个人配置：** `~/.pi/agent/subagent/profiles/<name>/`
+- **项目配置：** 项目或其上级目录中的 `.pi/subagent/profiles/<name>/`，仅在项目信任后加载。
 
 每个目录都需要一份 `config.json`，其中的 `name` 必须与目录名一致。距离当前工作目录更近的项目配置会替换上级目录或个人目录中的同名角色，不会合并字段。旧式的 `<name>.json` 单文件配置仍然受支持。
 
@@ -132,13 +135,19 @@ reviewer/
 
 ### 主 Pi 的委派规则
 
-在 `~/.pi/agent/facets/MAIN.md` 或受信任项目的 `.pi/facets/MAIN.md` 中写入规则，例如：
+在 `~/.pi/agent/subagent/MAIN.md` 或受信任项目的 `.pi/subagent/MAIN.md` 中写入规则，例如：
 
 ```markdown
 宣布任务完成之前，让 reviewer 审查本次代码变更。
 ```
 
 这些指令只适用于主 Pi，不会加载到子助手中。主 Pi 和子助手都需要遵守的项目规则应放在 `AGENTS.md` 中。
+
+## 清理已删除会话的遗留文件
+
+执行 `/clean-sub`，立即删除找不到对应 Main ID 的运行时通信目录。它检查 Pi 默认会话目录和当前会话目录，始终保留当前 Main，不新增索引文件。会话文件无法读取或文件头无效时会停止清理，不会将它们当作已删除。
+
+持久化 Sub 的 `.jsonl` **不会自动删除**，请通过 Pi 的会话列表手动删除。角色配置和全局设置不受影响，命令也不会关闭 Herdr 标签页。如果移动过 Main 文件或使用其他自定义会话目录，请先确保这些会话位于扫描范围内，再执行清理。
 
 ## 使用须知
 
@@ -150,7 +159,7 @@ reviewer/
 
 如果找不到角色或启动失败，先运行 `/profiles`，检查目录名与 `name` 是否一致、项目是否受信任，以及引用的工具和技能是否可用。如果提示 Herdr 不可用，请确认 Pi 正在 Herdr 工作区内运行。
 
-如需在 Herdr 的 Agents 面板中隐藏或显示 Facets 子助手，可安装可选的 [Herdr 配套插件](herdr-plugin/README.md)（英文说明）。
+如需在 Herdr 的 Agents 面板中隐藏或显示 Pi Subagent 子助手，可安装可选的 [Herdr 配套插件](herdr-plugin/README.md)（英文说明）。
 
 ## 开发
 

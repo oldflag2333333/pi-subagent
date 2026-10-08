@@ -6,7 +6,7 @@ export interface TalkReceipt {
 	messageId: string;
 }
 
-const PREFIX = "[Facets delivery v1] ";
+const PREFIX = "[Pi Subagent delivery v1] ";
 
 /** User messages have no custom details field. Keep receipt identity in their text. */
 export function formatTalkInput(receipt: TalkReceipt, content: string): string {

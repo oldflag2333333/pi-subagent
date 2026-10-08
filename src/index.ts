@@ -7,10 +7,11 @@ import { MainRunManager } from "./run-manager.js";
 import { registerSub } from "./tools/sub.js";
 import { talkView } from "./talk-render.js";
 import { registerSubCommands } from "./commands/sub.js";
+import { registerCleanSubCommand } from "./commands/clean-sub.js";
 import { registerMainTools } from "./tools/main.js";
 
-export default function piDelegate(pi: ExtensionAPI): void {
-	if (process.env.PI_FACETS_ROLE === "sub") {
+export default function piSubagent(pi: ExtensionAPI): void {
+	if (process.env.PI_SUBAGENT_ROLE === "sub") {
 		registerSub(pi);
 		return;
 	}
@@ -19,6 +20,7 @@ export default function piDelegate(pi: ExtensionAPI): void {
 	const startupProfile = new StartupProfileRuntime(pi);
 	registerMainTools(pi, manager);
 	registerSubCommands(pi, manager);
+	registerCleanSubCommand(pi);
 	startupProfile.register();
 	new MainContextRuntime(pi).register();
 

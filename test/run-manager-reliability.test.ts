@@ -12,7 +12,7 @@ let root: string;
 let previous: Record<string, string | undefined>;
 const managers: MainRunManager[] = [];
 beforeEach(() => {
-	root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-manager-reliable-"));
+	root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-manager-reliable-"));
 	previous = Object.fromEntries(["XDG_RUNTIME_DIR", "HERDR_ENV", "HERDR_WORKSPACE_ID"].map((key) => [key, process.env[key]]));
 	process.env.XDG_RUNTIME_DIR = root;
 	process.env.HERDR_ENV = "1";

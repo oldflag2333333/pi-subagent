@@ -18,7 +18,7 @@ interface DeliveryState {
 
 // Pi can retain native message queues across /reload. Retain only their
 // delivery state across extension replacement, keyed weakly by the session.
-const STATE_KEY = Symbol.for("pi-facets.inbox-state.v1");
+const STATE_KEY = Symbol.for("pi-subagent.inbox-state.v1");
 const globals = globalThis as unknown as Record<symbol, unknown>;
 const states = (globals[STATE_KEY] ??= new WeakMap<ReadonlySessionManager, DeliveryState>()) as WeakMap<ReadonlySessionManager, DeliveryState>;
 function state(ctx: ExtensionContext): DeliveryState {

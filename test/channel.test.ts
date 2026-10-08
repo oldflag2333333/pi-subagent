@@ -45,7 +45,7 @@ let root: string;
 let previousRuntimeDir: string | undefined;
 
 beforeEach(() => {
-	root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-facets-test-"));
+	root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-test-"));
 	previousRuntimeDir = process.env.XDG_RUNTIME_DIR;
 	process.env.XDG_RUNTIME_DIR = root;
 });
@@ -116,7 +116,7 @@ test("rejects a corrupt sequence counter instead of restarting the sequence", ()
 	const created = channel();
 	const manifest = readManifest(created.channelDir);
 	fs.writeFileSync(path.join(created.channelDir, "to-main-sequence.json"), "null");
-	assert.throws(() => talkToMain(created.channelDir, manifest, "Must not send"), /Invalid Facets talk sequence counter/);
+	assert.throws(() => talkToMain(created.channelDir, manifest, "Must not send"), /Invalid Pi Subagent talk sequence counter/);
 	assert.deepEqual(listTalkToMain(created.channelDir, manifest), []);
 });
 

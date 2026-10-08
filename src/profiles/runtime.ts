@@ -16,7 +16,7 @@ export class StartupProfileRuntime {
 
 	register(): void {
 		this.pi.registerFlag("profile", {
-			description: "Facets profile name to apply at process startup",
+			description: "Pi Subagent profile name to apply at process startup",
 			type: "string",
 		});
 
@@ -26,19 +26,19 @@ export class StartupProfileRuntime {
 			if (typeof selected !== "string" || !selected.trim()) {
 				this.active = undefined;
 				this.startupError = undefined;
-				ctx.ui.setStatus("facets-profile", undefined);
+				ctx.ui.setStatus("subagent-profile", undefined);
 				return;
 			}
 			try {
 				this.active = resolveProfile(selected.trim(), ctx.cwd, ctx.isProjectTrusted());
 				await this.apply(this.active, ctx);
 				this.startupError = undefined;
-				ctx.ui.setStatus("facets-profile", `profile:${this.active.name}`);
+				ctx.ui.setStatus("subagent-profile", `profile:${this.active.name}`);
 			} catch (error) {
 				this.active = undefined;
 				this.startupError = error instanceof Error ? error.message : String(error);
 				ctx.ui.notify(this.startupError, "error");
-				if (!ctx.hasUI) console.error(`Facets profile error: ${this.startupError}`);
+				if (!ctx.hasUI) console.error(`Pi Subagent profile error: ${this.startupError}`);
 			}
 		});
 
@@ -53,7 +53,7 @@ export class StartupProfileRuntime {
 			return { skillPaths: this.active.resolvedSkills };
 		});
 
-		bindPromptSections(this.pi, ["facets_profiles", "facets_profile"], () => {
+		bindPromptSections(this.pi, ["subagent_profiles", "subagent_profile"], () => {
 			const sections: Record<string, string> = {};
 			applyStartupPromptSections(sections, this.active, this.profilesContext);
 			return sections;
@@ -68,7 +68,7 @@ export class StartupProfileRuntime {
 					.map((profile) => `${profile.name} (${profile.source}, ${profile.invocation ?? "both"})${profile.description ? ` — ${profile.description}` : ""}`);
 				const diagnostics = catalog.diagnostics.map((item) => `${item.path}: ${item.message}`);
 				ctx.ui.notify([
-					lines.length > 0 ? lines.join("\n") : "No Facets profiles configured.",
+					lines.length > 0 ? lines.join("\n") : "No Pi Subagent profiles configured.",
 					...(diagnostics.length > 0 ? [`Invalid profiles:\n${diagnostics.join("\n")}`] : []),
 				].join("\n\n"), diagnostics.length > 0 ? "warning" : "info");
 			},

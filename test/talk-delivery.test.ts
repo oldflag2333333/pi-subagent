@@ -11,7 +11,7 @@ import { formatTalkInput } from "../src/talk-message.js";
 let root: string;
 let previous: string | undefined;
 beforeEach(() => {
-	root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-delivery-"));
+	root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-delivery-"));
 	previous = process.env.XDG_RUNTIME_DIR;
 	process.env.XDG_RUNTIME_DIR = root;
 });

@@ -1,7 +1,7 @@
 {
-  "name": "pi-facets",
+  "name": "pi-subagent",
   "version": "0.1.0",
-  "description": "Reusable Pi capability profiles plus context-isolated delegation and pluggable Sub surfaces",
+  "description": "Reusable specialist profiles and independent sub-agents for Pi",
   "type": "module",
   "license": "MIT",
   "author": {
@@ -11,23 +11,25 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oldflag2333333/pi-facets.git"
+    "url": "git+https://github.com/oldflag2333333/pi-subagent.git"
   },
-  "homepage": "https://github.com/oldflag2333333/pi-facets#readme",
+  "homepage": "https://github.com/oldflag2333333/pi-subagent#readme",
   "bugs": {
-    "url": "https://github.com/oldflag2333333/pi-facets/issues"
+    "url": "https://github.com/oldflag2333333/pi-subagent/issues"
   },
   "keywords": [
     "pi-package",
     "pi-extension",
     "profiles",
-    "sub",
+    "subagent",
     "herdr"
   ],
   "files": [
     "src",
     "herdr-plugin",
     "README.md",
+    "README.zh-CN.md",
+    "docs",
     "LICENSE"
   ],
   "pi": {

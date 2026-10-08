@@ -11,7 +11,7 @@ export class AdapterRegistry {
 
 	async resolve(): Promise<HerdrTabAdapter> {
 		if (!(await this.herdr.available())) {
-			throw new Error("Facets requires Herdr, but the Herdr adapter is unavailable.");
+			throw new Error("Pi Subagent requires Herdr, but the Herdr adapter is unavailable.");
 		}
 		return this.herdr;
 	}

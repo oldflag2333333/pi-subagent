@@ -1,4 +1,4 @@
-// MCP is ambient Pi context, not selected or validated by a Facets profile.
+// MCP is ambient Pi context, not selected or validated by a Pi Subagent profile.
 export const MCP_EXTENSIONS = ["builtin:codemode", "builtin:tool-search", "builtin:mcp"] as const;
 export const MCP_DISCOVERY_TOOLS = ["codemode", "tool_search"] as const;
 const RESOURCE_TOOLS = ["list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"];

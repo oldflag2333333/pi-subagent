@@ -6,9 +6,11 @@ import { registerMainTools } from "../src/tools/main.js";
 interface CapturedTool {
 	name: string;
 	exposure?: string;
+	label?: string;
+	parameters?: { properties: Record<string, unknown> };
 	renderCall?: (args: unknown, theme: unknown, context: { expanded: boolean; state?: Record<string, unknown> }) => { render(width: number): string[] };
 	renderResult?: (result: unknown, options: { isPartial: boolean }, theme: unknown, context?: { isError: boolean }) => { render(width: number): string[] };
-	execute?: (_id: string, params: { all?: boolean }) => Promise<{ content: Array<{ text: string }>; details: unknown }>;
+	execute?: (_id: string, params: Record<string, unknown>) => Promise<{ content: Array<{ text: string }>; details: unknown }>;
 }
 
 test("renders configured tools and skills under a Sub launch", () => {
@@ -98,12 +100,12 @@ test("interrupt_sub requests cancellation without closing the run", async () => 
 	assert.match(result.content[0]!.text, /Requested interruption/);
 });
 
-test("list_sub passes the optional all filter and reports live status", async () => {
+test("list_sub has no filter parameter and reports live status", async () => {
 	const tools: CapturedTool[] = [];
 	const pi = { registerTool: (tool: CapturedTool) => tools.push(tool) } as unknown as ExtensionAPI;
-	const requested: boolean[] = [];
-	registerMainTools(pi, { subs: async (all: boolean) => {
-		requested.push(all);
+	const requested: unknown[][] = [];
+	registerMainTools(pi, { subs: async (...args: unknown[]) => {
+		requested.push(args);
 		return { open: [{ run: {
 			runId: "c3b22f28-abcd", title: "Review MR", profileName: "reviewer",
 			sessionPersistence: "ephemeral", createdAt: Date.now(), surface: { adapter: "herdr" },
@@ -111,13 +113,14 @@ test("list_sub passes the optional all filter and reports live status", async ()
 	} } as never);
 	const list = tools.find((tool) => tool.name === "list_sub");
 	assert.ok(list?.execute);
+	assert.equal(list.label, "Sub-agents");
+	assert.deepEqual(list.parameters?.properties, {});
 	const result = await list.execute("id", {});
-	assert.match(result.content[0]!.text, /- blocked c3b22f28 Review MR <reviewer, ephemeral>/);
-	await list.execute("id", { all: true });
-	assert.deepEqual(requested, [false, true]);
+	assert.match(result.content[0]!.text, /^Open\n- blocked c3b22f28 Review MR <reviewer, ephemeral>/);
+	assert.deepEqual(requested, [[]]);
 });
 
-test("renders open and resumable Sub sessions under subs", () => {
+test("renders Sub-agents grouped under Open and Resumable", () => {
 	const tools: CapturedTool[] = [];
 	const pi = { registerTool: (tool: CapturedTool) => tools.push(tool) } as unknown as ExtensionAPI;
 	registerMainTools(pi, { runs: new Map() } as never);
@@ -128,7 +131,7 @@ test("renders open and resumable Sub sessions under subs", () => {
 		fg: (_color: string, text: string) => text,
 		bold: (text: string) => text,
 	};
-	assert.equal(list.renderCall({}, theme, { expanded: false }).render(120).join("\n").trimEnd(), "subs");
+	assert.equal(list.renderCall({}, theme, { expanded: false }).render(120).join("\n").trimEnd(), "Sub-agents");
 	const rendered = list.renderResult({
 		details: {
 			open: [{
@@ -149,7 +152,8 @@ test("renders open and resumable Sub sessions under subs", () => {
 			}],
 		},
 	}, { isPartial: false }, theme).render(120).join("\n");
-	assert.match(rendered, /• 发布舆情 web 与 job/);
+	assert.match(rendered, /^Open\s+• 发布舆情 web 与 job/);
+	assert.match(rendered, /Resumable\s+○ 历史审查/);
 	assert.match(rendered, /c3b22f28 · session- · misc · persistent · working · herdr · 46m/);
 	assert.match(rendered, /○ 历史审查/);
 	assert.match(rendered, /session- · persistent · closed · resumable · project · 2h/);

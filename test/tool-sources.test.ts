@@ -19,7 +19,7 @@ function profile(tools: string[]): ResolvedProfile {
 }
 
 test("derives and deduplicates extension entry paths from selected tool provenance", () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-facets-tool-source-"));
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-tool-source-"));
 	try {
 		const extension = path.join(root, "web.ts");
 		fs.writeFileSync(extension, "export default () => {}\n");

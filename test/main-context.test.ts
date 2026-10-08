@@ -21,7 +21,7 @@ function write(file: string, content: string): void {
 }
 
 beforeEach(() => {
-	root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-facets-main-context-"));
+	root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-main-context-"));
 	cwd = path.join(root, "project", "workspace", "requirement");
 	fs.mkdirSync(cwd, { recursive: true });
 	previousAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -62,7 +62,7 @@ test("contributes MAIN.md through a section, without reading or replacing the fu
 	const sections: Record<string, string> = { unrelated_extension: "Keep me" };
 	const event = { systemPromptOptions: { sections }, get systemPrompt(): string { throw new Error("Do not read the full prompt"); } };
 	assert.equal(handlers.get("before_agent_start")!(event, ctx), undefined);
-	assert.match(sections.facets_main!, /global main rule/);
+	assert.match(sections.subagent_main!, /global main rule/);
 	assert.equal(sections.unrelated_extension, "Keep me");
 	fs.rmSync(globalMainContextPath());
 	await handlers.get("session_start")!({}, ctx);

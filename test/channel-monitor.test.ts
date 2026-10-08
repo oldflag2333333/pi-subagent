@@ -112,7 +112,7 @@ test("shutdown cancels pending scans and closes all watchers without stale callb
 });
 
 test("native filesystem watching observes atomic rename without waiting for fallback", async (t) => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-watch-"));
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-watch-"));
 	fs.mkdirSync(path.join(root, "to-main"));
 	const batches: string[][] = [];
 	const errors: unknown[] = [];

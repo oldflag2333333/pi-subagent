@@ -16,7 +16,7 @@ const MAX_MANIFEST_BYTES = 1024 * 1024;
 const MAX_TALK_BYTES = 1024 * 1024;
 const MAX_CONTROL_BYTES = 64 * 1024;
 
-export const MESSAGE_TYPE = "facets-message";
+export const MESSAGE_TYPE = "subagent-message";
 
 export type TalkDirection = "to-main" | "to-sub";
 
@@ -27,7 +27,7 @@ function safeSegment(value: string): string {
 export function runtimeRoot(): string {
 	const base = process.env.XDG_RUNTIME_DIR || os.tmpdir();
 	const owner = typeof process.getuid === "function" ? String(process.getuid()) : safeSegment(os.userInfo().username);
-	return path.join(base, `pi-facets-${owner}`);
+	return path.join(base, `pi-subagent-${owner}`);
 }
 
 export function channelPath(mainSessionId: string, runId: string): string {
@@ -74,7 +74,7 @@ export function createChannel(input: Omit<DelegateManifest, "version" | "token" 
 		return { ...manifest, channelDir };
 	} catch (error) {
 		try { removeChannel(channelDir); } catch (cleanup) {
-			throw new AggregateError([error, cleanup], `Failed to create and clean up Facets channel ${channelDir}.`);
+			throw new AggregateError([error, cleanup], `Failed to create and clean up Pi Subagent channel ${channelDir}.`);
 		}
 		throw error;
 	}
@@ -102,7 +102,7 @@ export function readManifest(channelDir: string): DelegateManifest {
 		|| typeof value.title !== "string" || typeof value.task !== "string" || typeof value.cwd !== "string"
 		|| (value.origin !== undefined && value.origin !== "manual")
 		|| !validProfile(value.profile) || typeof value.token !== "string" || typeof value.createdAt !== "number") {
-		throw new Error("Invalid Facets channel manifest.");
+		throw new Error("Invalid Pi Subagent channel manifest.");
 	}
 	return value as unknown as DelegateManifest;
 }
@@ -115,10 +115,10 @@ function writeTalk(channelDir: string, manifest: DelegateManifest, direction: Ta
 	const previous = record(storedCounter);
 	if (storedCounter !== undefined && (!previous || previous.runId !== manifest.runId || previous.token !== manifest.token
 		|| !Number.isSafeInteger(previous.sequence) || (previous.sequence as number) < 1)) {
-		throw new Error("Invalid Facets talk sequence counter.");
+		throw new Error("Invalid Pi Subagent talk sequence counter.");
 	}
 	const sequence = ((previous?.sequence as number | undefined) ?? 0) + 1;
-	if (!Number.isSafeInteger(sequence)) throw new Error("Facets talk sequence exhausted.");
+	if (!Number.isSafeInteger(sequence)) throw new Error("Pi Subagent talk sequence exhausted.");
 	writeAtomicJson(counterPath, { runId: manifest.runId, token: manifest.token, sequence });
 	const talk: TalkMessage = {
 		version: 1,

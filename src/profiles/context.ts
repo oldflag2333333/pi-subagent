@@ -3,7 +3,7 @@ import type { ProfileCatalog } from "./types.js";
 const MAX_CONTEXT_BYTES = 16 * 1024;
 
 export function buildProfilesContext(catalog: ProfileCatalog): string {
-	const header = "## Available Facets delegation profiles\n";
+	const header = "## Available Pi Subagent delegation profiles\n";
 	const footer = "Use the exact profile name as delegate.profile. Project profiles override same-named global profiles.";
 	const profiles = [...catalog.profiles.values()].filter((profile) => profile.invocation !== "manual").sort((left, right) => left.name.localeCompare(right.name));
 	if (profiles.length === 0) {

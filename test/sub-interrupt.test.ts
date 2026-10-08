@@ -9,15 +9,15 @@ import { createChannel, readActiveTurn, readInterrupt, readManifest, writeInterr
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test("Sub aborts only the targeted turn and stays open", async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-facets-interrupt-"));
-	const previous = { channel: process.env.PI_FACETS_CHANNEL, token: process.env.PI_FACETS_TOKEN, runtime: process.env.XDG_RUNTIME_DIR };
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-interrupt-"));
+	const previous = { channel: process.env.PI_SUBAGENT_CHANNEL, token: process.env.PI_SUBAGENT_TOKEN, runtime: process.env.XDG_RUNTIME_DIR };
 	process.env.XDG_RUNTIME_DIR = root;
 	const channel = createChannel({
 		runId: "run-1", mainSessionId: "main-1", title: "Review", task: "Review it", cwd: root,
 		profile: { version: 1, name: "reviewer", tools: ["read"], source: "global", sourcePath: "/tmp/reviewer.json", resolvedSkills: [], resolvedExtensions: [] },
 	});
-	process.env.PI_FACETS_CHANNEL = channel.channelDir;
-	process.env.PI_FACETS_TOKEN = channel.token;
+	process.env.PI_SUBAGENT_CHANNEL = channel.channelDir;
+	process.env.PI_SUBAGENT_TOKEN = channel.token;
 	const handlers = new Map<string, Array<(...args: any[]) => void>>();
 	const pi = {
 		on: (event: string, handler: (...args: any[]) => void) => {
@@ -88,7 +88,7 @@ test("Sub aborts only the targeted turn and stays open", async () => {
 	} finally {
 		stopProtocol?.();
 		for (const [key, value] of Object.entries(previous)) {
-			const env = key === "channel" ? "PI_FACETS_CHANNEL" : key === "token" ? "PI_FACETS_TOKEN" : "XDG_RUNTIME_DIR";
+			const env = key === "channel" ? "PI_SUBAGENT_CHANNEL" : key === "token" ? "PI_SUBAGENT_TOKEN" : "XDG_RUNTIME_DIR";
 			if (value === undefined) delete process.env[env]; else process.env[env] = value;
 		}
 		fs.rmSync(root, { recursive: true, force: true });

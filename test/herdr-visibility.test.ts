@@ -15,7 +15,7 @@ function runAction(action: string, socketPath: string, stateDir: string): Promis
 			env: {
 				...process.env,
 				HERDR_SOCKET_PATH: socketPath,
-				HERDR_PLUGIN_ID: "facets.agent-visibility",
+				HERDR_PLUGIN_ID: "subagent.agent-visibility",
 				HERDR_PLUGIN_STATE_DIR: stateDir,
 			},
 			stdio: ["ignore", "ignore", "pipe"],
@@ -27,8 +27,8 @@ function runAction(action: string, socketPath: string, stateDir: string): Promis
 	});
 }
 
-test("Herdr companion action hides and toggles Facets subs", { skip: process.platform === "win32" }, async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-facets-herdr-view-"));
+test("Herdr companion action hides and toggles Pi Subagent subs", { skip: process.platform === "win32" }, async () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-herdr-view-"));
 	const socketPath = path.join(root, "herdr.sock");
 	const stateDir = path.join(root, "state");
 	const requests: Array<Record<string, unknown>> = [];
@@ -53,7 +53,7 @@ test("Herdr companion action hides and toggles Facets subs", { skip: process.pla
 		assert.equal(requests[0]?.method, "agent.view.set");
 		assert.deepEqual((requests[0]?.params as { filter: unknown }).filter, {
 			op: "not",
-			filter: { op: "eq", field: { token: "facets_role" }, value: "sub" },
+			filter: { op: "eq", field: { token: "subagent_role" }, value: "sub" },
 		});
 		assert.equal(requests[1]?.method, "agent.view.clear");
 		assert.equal(JSON.parse(fs.readFileSync(path.join(stateDir, "visibility.json"), "utf8")).showSubs, true);

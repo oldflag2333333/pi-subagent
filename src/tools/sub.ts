@@ -35,9 +35,9 @@ function contentText(content: unknown): string {
 }
 
 function loadManifest(): { channelDir: string; manifest: DelegateManifest } {
-	const channelDir = process.env.PI_FACETS_CHANNEL;
-	const envToken = process.env.PI_FACETS_TOKEN;
-	if (!channelDir) throw new Error("PI_FACETS_CHANNEL is missing in Sub Pi.");
+	const channelDir = process.env.PI_SUBAGENT_CHANNEL;
+	const envToken = process.env.PI_SUBAGENT_TOKEN;
+	if (!channelDir) throw new Error("PI_SUBAGENT_CHANNEL is missing in Sub Pi.");
 	const manifest = readManifest(channelDir);
 	if (!envToken || envToken !== manifest.token) throw new Error("Sub channel capability token does not match.");
 	return { channelDir, manifest };
@@ -79,7 +79,7 @@ export function registerSub(pi: ExtensionAPI): void {
 		activeContext = ctx;
 		pi.setSessionName(subSessionName(loaded.manifest.title, loaded.manifest.origin));
 		ctx.ui.setTitle(`[sub] ${loaded.manifest.title}`);
-		ctx.ui.setStatus("facets", `sub · ${loaded.manifest.profile.name}`);
+		ctx.ui.setStatus("subagent", `sub · ${loaded.manifest.profile.name}`);
 		const sessionFile = ctx.sessionManager.getSessionFile();
 		if (loaded.manifest.profile.sessionPersistence === "persistent" && sessionFile) {
 			writeSubSessionInfo(loaded.channelDir, loaded.manifest, {
@@ -114,7 +114,7 @@ export function registerSub(pi: ExtensionAPI): void {
 			if (!ready) return;
 			for (const message of listTalkToSub(loaded.channelDir, loaded.manifest)) {
 				deliverTalk(pi, ctx, loaded.channelDir, loaded.manifest, "to-sub", message,
-					`[Facets Main message]\nMain says:\n${message.message}`);
+					`[Pi Subagent Main message]\nMain says:\n${message.message}`);
 			}
 			protocolErrors.clear(loaded.manifest.runId);
 		} catch (error) {
@@ -147,10 +147,10 @@ export function registerSub(pi: ExtensionAPI): void {
 		}
 	});
 
-	bindPromptSections(pi, ["facets_sub_protocol", "facets_profile"], () => {
+	bindPromptSections(pi, ["subagent_sub_protocol", "subagent_profile"], () => {
 		const sections: Record<string, string> = {};
 		applySubPromptSections(sections, loaded.manifest.profile);
-		if (loaded.manifest.origin === "manual") sections.facets_sub_protocol += `\n\n${MANUAL_SUB_GUIDANCE}`;
+		if (loaded.manifest.origin === "manual") sections.subagent_sub_protocol += `\n\n${MANUAL_SUB_GUIDANCE}`;
 		return sections;
 	});
 

@@ -3,7 +3,7 @@ import * as net from "node:net";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const pluginId = process.env.HERDR_PLUGIN_ID ?? "facets.agent-visibility";
+const pluginId = process.env.HERDR_PLUGIN_ID ?? "subagent.agent-visibility";
 const source = `plugin:${pluginId}`;
 const socketPath = process.env.HERDR_SOCKET_PATH;
 const stateDir = process.env.HERDR_PLUGIN_STATE_DIR;
@@ -34,7 +34,7 @@ function writeState(state) {
 function send(method, params) {
 	if (!socketPath) return Promise.reject(new Error("HERDR_SOCKET_PATH is missing."));
 	const endpoint = process.platform === "win32" ? `\\\\.\\pipe\\${socketPath}` : socketPath;
-	const request = { id: `facets:${Date.now()}:${process.pid}`, method, params };
+	const request = { id: `subagent:${Date.now()}:${process.pid}`, method, params };
 	return new Promise((resolve, reject) => {
 		let buffer = "";
 		const socket = net.createConnection(endpoint);
@@ -76,7 +76,7 @@ async function apply(showSubs) {
 			op: "not",
 			filter: {
 				op: "eq",
-				field: { token: "facets_role" },
+				field: { token: "subagent_role" },
 				value: "sub",
 			},
 		},
@@ -97,7 +97,7 @@ export async function run(action = "startup") {
 	if (action === "hide") next.showSubs = false;
 	writeState(next);
 	await apply(next.showSubs);
-	console.log(next.showSubs ? "Facets subs are visible." : "Facets subs are hidden.");
+	console.log(next.showSubs ? "Pi Subagent subs are visible." : "Pi Subagent subs are hidden.");
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

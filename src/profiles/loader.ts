@@ -187,11 +187,11 @@ function loadDirectory(directory: string, source: ProfileSource, diagnostics: Pr
 }
 
 export function globalProfilesDir(): string {
-	return path.join(getAgentDir(), "facets", "profiles");
+	return path.join(getAgentDir(), "subagent", "profiles");
 }
 
 export function projectProfilesDir(cwd: string): string {
-	return path.join(cwd, CONFIG_DIR_NAME, "facets", "profiles");
+	return path.join(cwd, CONFIG_DIR_NAME, "subagent", "profiles");
 }
 
 function ancestorDirectories(cwd: string): string[] {
@@ -301,7 +301,7 @@ export function resolveProfile(name: string, cwd: string, includeProject: boolea
 	if (!profile) {
 		const available = [...catalog.profiles.values()].filter((item) => !options.agentOnly || item.invocation !== "manual").map((item) => item.name).sort().join(", ") || "(none)";
 		const suffix = !options.agentOnly && invalid.length > 0 ? ` Invalid profiles: ${invalid.join("; ")}` : "";
-		throw new Error(`Unknown Facets profile '${name}'. Available: ${available}.${suffix}`);
+		throw new Error(`Unknown Pi Subagent profile '${name}'. Available: ${available}.${suffix}`);
 	}
 	if (options.agentOnly && profile.invocation === "manual") {
 		throw new Error(`Profile '${name}' is user-invoked only. The user can start it with /sub:${name}; delegate cannot start it.`);

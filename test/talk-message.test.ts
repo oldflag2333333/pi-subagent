@@ -21,11 +21,11 @@ test("non-user messages, quoted markers, and malformed identities cannot be rece
 		"Quoted:\n" + text,
 		"\n" + text,
 		[{ type: "text", text: "Quote" }, { type: "text", text }],
-		"[Facets delivery v1] {broken",
-		"[Facets delivery v1] null",
-		'[Facets delivery v1] {"direction":"invalid","runId":"run","messageId":"message"}',
-		'[Facets delivery v1] {"direction":"to-main","runId":"","messageId":"message"}',
-		'[Facets delivery v1] {"direction":"to-main","runId":"run","messageId":123}',
+		"[Pi Subagent delivery v1] {broken",
+		"[Pi Subagent delivery v1] null",
+		'[Pi Subagent delivery v1] {"direction":"invalid","runId":"run","messageId":"message"}',
+		'[Pi Subagent delivery v1] {"direction":"to-main","runId":"","messageId":"message"}',
+		'[Pi Subagent delivery v1] {"direction":"to-main","runId":"run","messageId":123}',
 		null,
 	]) {
 		assert.equal(readTalkReceipt({ role: "user", content }), undefined);

@@ -20,13 +20,13 @@ import {
 	writeInterrupt,
 } from "./channel.js";
 import type { ResolvedProfile } from "./profiles/types.js";
-import { listResumableSubSessions, resolveResumableSubSession } from "./sessions.js";
+import { selectResumableSubSessions, resolveResumableSubSession, type ResumableSubSession } from "./sessions.js";
 import { MANUAL_MAIN_GUIDANCE } from "./manual-context.js";
 import { deliverTalk, ProtocolErrors } from "./talk-delivery.js";
 import type { RunSnapshot, SubAgentStatus } from "./types.js";
 
-const RUN_ENTRY = "facets-run";
-const MANUAL_BINDING_ENTRY = "facets-manual-profile";
+const RUN_ENTRY = "subagent-run";
+const MANUAL_BINDING_ENTRY = "subagent-manual-profile";
 export const MAX_OPEN_SUBS = 4;
 
 function parseSnapshot(value: unknown): RunSnapshot | undefined {
@@ -124,7 +124,7 @@ export class MainRunManager {
 			}
 			if (entry.type !== "custom" || entry.customType !== RUN_ENTRY) continue;
 			const snapshot = parseSnapshot(entry.data);
-			if (snapshot && (snapshot.origin !== "manual" || snapshot.mainSessionId === ctx.sessionManager.getSessionId())) latest.set(snapshot.runId, snapshot);
+			if (snapshot?.mainSessionId === ctx.sessionManager.getSessionId()) latest.set(snapshot.runId, snapshot);
 		}
 		for (const run of latest.values()) {
 			this.history.set(run.runId, run);
@@ -177,10 +177,10 @@ export class MainRunManager {
 		resumeSessionId?: string;
 		origin?: "manual";
 	}, signal?: AbortSignal): Promise<RunSnapshot> {
-		if (!this.ctx) throw new Error("Facets is not attached to an active Main session.");
+		if (!this.ctx) throw new Error("Pi Subagent is not attached to an active Main session.");
 		if (input.profile.invocation === "manual" && input.origin !== "manual") throw new Error("This profile is user-invoked only; use its slash command.");
-		if (this.runs.size >= MAX_OPEN_SUBS) throw new Error(`Facets allows at most ${MAX_OPEN_SUBS} open Subs.`);
-		const resume = input.resumeSessionId ? await resolveResumableSubSession(input.resumeSessionId, input.origin === "manual") : undefined;
+		if (this.runs.size >= MAX_OPEN_SUBS) throw new Error(`Pi Subagent allows at most ${MAX_OPEN_SUBS} open Subs.`);
+		const resume = input.resumeSessionId ? resolveResumableSubSession(input.resumeSessionId, this.resumableSessions(), input.origin === "manual") : undefined;
 		if (resume && input.profile.sessionPersistence !== "persistent") {
 			throw new Error(`Profile '${input.profile.name}' must use sessionPersistence 'persistent' when resuming a Sub session.`);
 		}
@@ -326,25 +326,25 @@ export class MainRunManager {
 		return { run, messageId: sent.id };
 	}
 
-	async subs(all = false): Promise<{
+	private resumableSessions(): ResumableSubSession[] {
+		if (!this.sessionId) return [];
+		return selectResumableSubSessions(this.history.values(), this.sessionId);
+	}
+
+	async subs(): Promise<{
 		open: Array<{ run: RunSnapshot; status: SubAgentStatus }>;
-		resumable: Awaited<ReturnType<typeof listResumableSubSessions>>;
+		resumable: ResumableSubSession[];
 	}> {
-		const runs = [...this.runs.values()];
-		const activeSessionIds = new Set(runs.flatMap((run) => run.subSessionId ? [run.subSessionId] : []));
-		const [open, resumable] = await Promise.all([
-			Promise.all(runs.map(async (run) => ({ run, status: await this.adapters.status(run.surface) }))),
-			listResumableSubSessions(activeSessionIds),
-		]);
-		const manual = [...this.manualBindings.values()].flatMap((id) => {
-			const run = this.history.get(id);
-			return run?.subSessionId && run.subSessionFile && !activeSessionIds.has(run.subSessionId) && fs.existsSync(run.subSessionFile)
-				? [{ sessionId: run.subSessionId, sessionFile: run.subSessionFile, title: run.title, cwd: run.cwd, modifiedAt: run.updatedAt, origin: "manual" as const, profileName: run.profileName, purpose: run.purpose }]
-				: [];
-		});
+		if (!this.ctx) return { open: [], resumable: [] };
+		this.poll();
+		const owner = this.sessionId;
+		const runs = [...this.runs.values()].filter((run) => run.mainSessionId === owner);
+		const open = await Promise.all(runs.map(async (run) => ({ run, status: await this.adapters.status(run.surface) })));
+		// Main may switch sessions or a Sub may close while Herdr queries are pending.
+		if (!this.ctx || this.sessionId !== owner) return { open: [], resumable: [] };
 		return {
-			open: all ? open : open.filter(({ run, status }) => run.sessionPersistence === "persistent" || status === "working" || status === "blocked"),
-			resumable: [...resumable, ...manual],
+			open: open.filter(({ run }) => this.runs.has(run.runId) && run.closedAt === undefined),
+			resumable: this.resumableSessions(),
 		};
 	}
 
@@ -387,13 +387,13 @@ export class MainRunManager {
 
 	private reportChannelError(run: RunSnapshot, error: unknown): void {
 		if (this.ctx) this.pollErrors.report(this.ctx, run.runId, error);
-		else console.error(`Facets channel error (${run.runId}): ${error instanceof Error ? error.message : String(error)}`);
+		else console.error(`Pi Subagent channel error (${run.runId}): ${error instanceof Error ? error.message : String(error)}`);
 	}
 
 	private finishClosed(run: RunSnapshot): void {
-		if (run.origin === "manual") {
+		if (run.origin === "manual" || (run.sessionPersistence === "persistent" && run.subSessionId && run.subSessionFile)) {
 			run.closedAt ??= Date.now();
-			this.save(run); // Keep the persistent identity after the runtime channel is removed.
+			this.save(run); // Keep this Main's closed session identity after channel cleanup.
 		}
 		removeChannel(run.channelDir);
 		this.monitor.remove(run.runId);
@@ -426,7 +426,7 @@ export class MainRunManager {
 				const messages = listTalkToMain(run.channelDir, manifest);
 				let pending = messages.length;
 				for (const message of messages) {
-					const content = `[Facets Sub message]${run.origin === "manual" ? `\n[User-invoked specialist: ${run.profileName}]\n${run.purpose ? `Purpose: ${run.purpose}\n` : ""}${MANUAL_MAIN_GUIDANCE}` : ""}\nSub '${run.title}' (${run.runId}) says:\n${message.message}\n\n${run.closedAt === undefined ? `Use talk with runId '${run.runId}' to respond, or close_sub when the delivery is accepted and no more work is needed.` : "This Sub has already closed; this is a retained final delivery."}`;
+					const content = `[Pi Subagent Sub message]${run.origin === "manual" ? `\n[User-invoked specialist: ${run.profileName}]\n${run.purpose ? `Purpose: ${run.purpose}\n` : ""}${MANUAL_MAIN_GUIDANCE}` : ""}\nSub '${run.title}' (${run.runId}) says:\n${message.message}\n\n${run.closedAt === undefined ? `Use talk with runId '${run.runId}' to respond, or close_sub when the delivery is accepted and no more work is needed.` : "This Sub has already closed; this is a retained final delivery."}`;
 					const result = deliverTalk(this.pi, ctx, run.channelDir, manifest, "to-main", message, content);
 					if (result === "acknowledged") pending--;
 				}

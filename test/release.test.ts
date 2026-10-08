@@ -6,8 +6,8 @@ import { test } from "node:test";
 import { publishRelease, readReleasePackage, shouldRelease, type ReleasePackage } from "../.github/scripts/release.js";
 
 const sha = "a".repeat(40);
-const pkg: ReleasePackage = { name: "pi-facets", version: "0.6.0", tag: "v0.6.0", prerelease: false, distTag: "latest" };
-const options = { repository: "oldflag2333333/pi-facets", sha, token: "fixture-token" };
+const pkg: ReleasePackage = { name: "pi-subagent", version: "0.6.0", tag: "v0.6.0", prerelease: false, distTag: "latest" };
+const options = { repository: "oldflag2333333/pi-subagent", sha, token: "fixture-token" };
 
 test("only an increasing package version triggers a release", () => {
 	assert.equal(shouldRelease(pkg, undefined), false);
@@ -19,10 +19,10 @@ test("only an increasing package version triggers a release", () => {
 });
 
 test("release metadata validates the lockfile and distinguishes prereleases", () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-release-test-"));
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-release-test-"));
 	const write = (version: string, lockVersion = version) => {
-		fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "pi-facets", version }));
-		fs.writeFileSync(path.join(root, "package-lock.json"), JSON.stringify({ name: "pi-facets", version: lockVersion, packages: { "": { name: "pi-facets", version: lockVersion } } }));
+		fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "pi-subagent", version }));
+		fs.writeFileSync(path.join(root, "package-lock.json"), JSON.stringify({ name: "pi-subagent", version: lockVersion, packages: { "": { name: "pi-subagent", version: lockVersion } } }));
 	};
 	try {
 		write("0.6.0");

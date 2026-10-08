@@ -69,7 +69,7 @@ async function fixture(root: string) {
 					return stream;
 				},
 			});
-			bindPromptSections(pi, ["facets_fixture"], () => ({ facets_fixture: instructions }));
+			bindPromptSections(pi, ["subagent_fixture"], () => ({ subagent_fixture: instructions }));
 			pi.on("before_agent_start", (event) => { promptHooks.push(event.prompt); });
 			pi.on("input", (event) => { inputSources.push(event.source); });
 			manager = new MainRunManager(pi);
@@ -102,7 +102,7 @@ async function fixture(root: string) {
 }
 
 test("idle talk bursts use normal input hooks, then reassemble changed sections after reload", async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-idle-queue-sdk-"));
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-idle-queue-sdk-"));
 	const previous = process.env.XDG_RUNTIME_DIR;
 	process.env.XDG_RUNTIME_DIR = root;
 	let f: Awaited<ReturnType<typeof fixture>> | undefined;
@@ -133,11 +133,11 @@ test("idle talk bursts use normal input hooks, then reassemble changed sections 
 		assert.ok(f.promptHooks[1]!.includes("/skill:not-a-command"));
 		assert.equal(f.inboxEntries().length, 3);
 		for (const request of f.requests.slice(0, 2)) {
-			assert.match(getCurrentSystemMessage(request.messages)?.sections?.facets_fixture ?? "", /Fixture role instructions/);
+			assert.match(getCurrentSystemMessage(request.messages)?.sections?.subagent_fixture ?? "", /Fixture role instructions/);
 		}
-		assert.match(getCurrentSystemMessage(f.requests[2]!.messages)?.sections?.facets_fixture ?? "", /Updated role after reload/);
+		assert.match(getCurrentSystemMessage(f.requests[2]!.messages)?.sections?.subagent_fixture ?? "", /Updated role after reload/);
 		const savedSystem = f.session.sessionManager.getBranch().flatMap((entry) => entry.type === "message" && entry.message.role === "system" ? [entry.message] : []);
-		assert.match(getCurrentSystemMessage(savedSystem)?.sections?.facets_fixture ?? "", /Updated role after reload/,
+		assert.match(getCurrentSystemMessage(savedSystem)?.sections?.subagent_fixture ?? "", /Updated role after reload/,
 			"Sections must be recorded by Pi, not injected through a request-local fallback");
 		assert.deepEqual(f.errors, []);
 	} finally {
@@ -151,7 +151,7 @@ test("idle talk bursts use normal input hooks, then reassemble changed sections 
 
 for (const mode of ["reload", "cancel-clear"]) {
 	test(`real Pi queue recovery: ${mode}`, async () => {
-		const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-queue-sdk-"));
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-queue-sdk-"));
 		const previous = process.env.XDG_RUNTIME_DIR;
 		process.env.XDG_RUNTIME_DIR = root;
 		let f: Awaited<ReturnType<typeof fixture>> | undefined;
@@ -187,7 +187,7 @@ for (const mode of ["reload", "cancel-clear"]) {
 			await f.session.waitForIdle();
 			assert.equal(f.inboxEntries().length, 1);
 			assert.equal(f.requests.length, mode === "reload" ? 2 : 3);
-			for (const request of f.requests) assert.match(getCurrentSystemMessage(request.messages)?.sections?.facets_fixture ?? "", /Fixture role instructions/);
+			for (const request of f.requests) assert.match(getCurrentSystemMessage(request.messages)?.sections?.subagent_fixture ?? "", /Fixture role instructions/);
 			assert.deepEqual(f.errors, []);
 		} finally {
 			await f?.session.abort();

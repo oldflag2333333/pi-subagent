@@ -35,7 +35,7 @@ export function deliverTalk(
 	if (!ctx.model) throw new Error("Cannot deliver talk: the receiving Pi has no selected model.");
 	markTalkQueued(ctx, pending);
 	try {
-		// Pi owns waiting behind current work, not Facets. In-flight IDs prevent
+		// Pi owns waiting behind current work, not Pi Subagent. In-flight IDs prevent
 		// repeated file notifications from submitting the same follow-up twice.
 		pi.sendUserMessage(formatTalkInput({ direction, runId: manifest.runId, messageId: message.id }, content), {
 			deliverAs: "followUp",
@@ -59,7 +59,7 @@ export class ProtocolErrors {
 	private readonly reported = new Map<string, string>();
 
 	report(ctx: ExtensionContext, key: string, error: unknown): void {
-		const message = `Facets channel error (${key}): ${error instanceof Error ? error.message : String(error)}`;
+		const message = `Pi Subagent channel error (${key}): ${error instanceof Error ? error.message : String(error)}`;
 		if (this.reported.get(key) === message) return;
 		this.reported.set(key, message);
 		let notified = false;

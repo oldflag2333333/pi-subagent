@@ -27,7 +27,7 @@ function writeDirectoryProfile(rootDir: string, name: string, value: unknown): s
 }
 
 beforeEach(() => {
-	root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-facets-profiles-"));
+	root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-profiles-"));
 	cwd = path.join(root, "project");
 	fs.mkdirSync(cwd);
 	previousAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -298,12 +298,12 @@ test("does not discover named skills in untrusted projects or ancestors", () => 
 	const nestedCwd = path.join(cwd, "workspace");
 	fs.mkdirSync(nestedCwd);
 	writeJson(path.join(globalProfilesDir(), "reviewer.json"), {
-		version: 1, name: "reviewer", tools: ["read"], skills: ["facets-test-project-only"],
+		version: 1, name: "reviewer", tools: ["read"], skills: ["subagent-test-project-only"],
 	});
 	for (const location of [".pi", ".agents"]) {
-		const skill = path.join(cwd, location, "skills", "facets-test-project-only", "SKILL.md");
+		const skill = path.join(cwd, location, "skills", "subagent-test-project-only", "SKILL.md");
 		fs.mkdirSync(path.dirname(skill), { recursive: true });
-		fs.writeFileSync(skill, "---\nname: facets-test-project-only\ndescription: Project only\n---\n");
+		fs.writeFileSync(skill, "---\nname: subagent-test-project-only\ndescription: Project only\n---\n");
 		assert.throws(() => resolveProfile("reviewer", nestedCwd, false), /unknown skill/);
 		assert.ok(resolveProfile("reviewer", nestedCwd, true).resolvedSkills.includes(skill));
 		fs.rmSync(path.dirname(skill), { recursive: true });

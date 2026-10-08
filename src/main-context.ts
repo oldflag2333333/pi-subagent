@@ -25,11 +25,11 @@ function ancestorDirectories(cwd: string): string[] {
 }
 
 export function globalMainContextPath(): string {
-	return path.join(getAgentDir(), "facets", MAIN_CONTEXT_FILE);
+	return path.join(getAgentDir(), "subagent", MAIN_CONTEXT_FILE);
 }
 
 export function projectMainContextPath(directory: string): string {
-	return path.join(directory, CONFIG_DIR_NAME, "facets", MAIN_CONTEXT_FILE);
+	return path.join(directory, CONFIG_DIR_NAME, "subagent", MAIN_CONTEXT_FILE);
 }
 
 export function loadMainContext(cwd: string, includeProject: boolean): MainContextLoadResult {
@@ -63,7 +63,7 @@ export function loadMainContext(cwd: string, includeProject: boolean): MainConte
 
 	return {
 		content: sections
-			.map((section) => `## Facets Main context: ${section.path}\n\n${section.content}`)
+			.map((section) => `## Pi Subagent Main context: ${section.path}\n\n${section.content}`)
 			.join("\n\n"),
 		paths: sections.map((section) => section.path),
 		diagnostics,
@@ -80,12 +80,12 @@ export class MainContextRuntime {
 			const loaded = loadMainContext(ctx.cwd, ctx.isProjectTrusted());
 			this.content = loaded.content;
 			for (const diagnostic of loaded.diagnostics) {
-				const message = `Facets Main context error (${diagnostic.path}): ${diagnostic.message}`;
+				const message = `Pi Subagent Main context error (${diagnostic.path}): ${diagnostic.message}`;
 				ctx.ui.notify(message, "warning");
 				if (!ctx.hasUI) console.error(message);
 			}
 		});
 
-		bindPromptSections(this.pi, ["facets_main"], (): Record<string, string> => this.content ? { facets_main: this.content } : {});
+		bindPromptSections(this.pi, ["subagent_main"], (): Record<string, string> => this.content ? { subagent_main: this.content } : {});
 	}
 }

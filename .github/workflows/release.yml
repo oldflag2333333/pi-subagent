@@ -33,7 +33,7 @@ jobs:
 
   plan:
     name: Detect version bump
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'oldflag2333333/pi-facets'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'oldflag2333333/pi-subagent'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:

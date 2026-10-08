@@ -8,7 +8,7 @@ input.on("line", (line) => {
 	let result;
 	switch (request.method) {
 		case "initialize":
-			result = { protocolVersion: request.params.protocolVersion, capabilities: { tools: {}, resources: {} }, serverInfo: { name: "facets-test", version: "1.0.0" } };
+			result = { protocolVersion: request.params.protocolVersion, capabilities: { tools: {}, resources: {} }, serverInfo: { name: "subagent-test", version: "1.0.0" } };
 			break;
 		case "tools/list":
 			result = { tools: ["echo", "direct", "hidden"].map((name) => ({ name, description: `Fixture ${name}`, inputSchema: { type: "object", properties: {} } })) };

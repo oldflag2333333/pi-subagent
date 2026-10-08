@@ -1,4 +1,4 @@
-# Releasing Facets
+# Releasing Pi Subagent
 
 Maintainer guide. For installation and usage, see the [README](../README.md).
 
@@ -13,16 +13,16 @@ A **version increase in `package.json` pushed to `main`** releases automatically
 3. Publish the npm tarball through OIDC trusted publishing, with provenance.
 4. Create the GitHub Release with automatically generated release notes.
 
-Ordinary code/dependency changes with no version increase do not publish. Neither PRs, `dev` pushes, tag pushes, nor installing the workflow alone publish a package. Stable versions use npm's `latest` tag; prereleases such as `0.6.0-rc.1` use `next` and GitHub's prerelease flag.
+Ordinary code/dependency changes with no version increase do not publish. Neither PRs, `dev` pushes, tag pushes, nor installing the workflow alone publish a package. Stable versions use npm's `latest` tag; prereleases such as `0.2.0-rc.1` use `next` and GitHub's prerelease flag.
 
 ### One-time npm setup
 
-In the npm settings for **pi-facets**, add a **GitHub Actions Trusted Publisher**:
+In the npm settings for **pi-subagent**, add a **GitHub Actions Trusted Publisher**:
 
 | Setting | Value |
 | --- | --- |
 | Organization or user | `oldflag2333333` |
-| Repository | `pi-facets` |
+| Repository | `pi-subagent` |
 | Workflow filename | `release.yml` (filename only, not a path) |
 | Environment | Leave blank; this workflow does not use a GitHub Environment |
 | Allowed actions | Allow direct `npm publish` |
@@ -39,7 +39,7 @@ On your feature/release branch:
 npm version minor --no-git-tag-version
 # Or: npm version patch --no-git-tag-version
 git add package.json package-lock.json
-git commit -m "chore: release v0.6.0"
+git commit -m "chore: release v0.2.0"
 ```
 
 Merge that change into `main` (or push it directly if your branch policy allows). The workflow handles the tag, npm publication, and GitHub Release; do not run `npm publish` yourself.

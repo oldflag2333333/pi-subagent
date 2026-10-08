@@ -17,7 +17,7 @@ const spec: SubLaunchSpec = {
 	resumeSessionId: "session-to-resume",
 	channelDir: "/tmp/channel",
 	token: "token",
-	entryPath: "/tmp/facets.ts",
+	entryPath: "/tmp/subagent.ts",
 	profile: {
 		version: 1,
 		name: "research",
@@ -160,7 +160,7 @@ test("starts an idle Pi before submitting work through herdr agent prompt", asyn
 	const previousEnvironment = process.env.HERDR_ENV;
 	const previousWorkspace = process.env.HERDR_WORKSPACE_ID;
 	const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-	const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-facets-herdr-"));
+	const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-herdr-"));
 	const integration = path.join(agentDir, "extensions", "herdr-agent-state.ts");
 	fs.mkdirSync(path.dirname(integration), { recursive: true });
 	fs.writeFileSync(integration, "export default () => {}\n");
@@ -192,8 +192,8 @@ test("starts an idle Pi before submitting work through herdr agent prompt", asyn
 		assert.equal(start.args.includes("--approve"), true);
 		assert.equal(start.args.includes("--no-approve"), false);
 		assert.ok(metadata);
-		assert.equal(metadata.args.includes("facets_role=sub"), true);
-		assert.equal(metadata.args.includes("facets_main_session=main-session-1"), true);
+		assert.equal(metadata.args.includes("subagent_role=sub"), true);
+		assert.equal(metadata.args.includes("subagent_main_session=main-session-1"), true);
 		assert.equal(prompt.args.includes(spec.task), true);
 		assert.ok(calls.indexOf(start) < calls.indexOf(metadata));
 		assert.ok(calls.indexOf(metadata) < calls.indexOf(prompt));

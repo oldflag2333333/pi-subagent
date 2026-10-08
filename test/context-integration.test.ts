@@ -12,8 +12,8 @@ import { StartupProfileRuntime } from "../src/profiles/runtime.js";
 import { readTalkReceipt } from "../src/talk-message.js";
 
 function registerFixtureModel(pi: ExtensionAPI, requests: TranscriptContext[]) {
-	pi.registerProvider("facets-context-fixture", {
-		api: "facets-context-fixture-api", apiKey: "fixture-only", baseUrl: "https://fixture.invalid",
+	pi.registerProvider("subagent-context-fixture", {
+		api: "subagent-context-fixture-api", apiKey: "fixture-only", baseUrl: "https://fixture.invalid",
 		models: [{ id: "fixture", name: "Fixture", reasoning: false, input: ["text"], contextWindow: 128000, maxTokens: 1024, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }],
 		streamSimple: (model, context) => {
 			requests.push(structuredClone(context));
@@ -60,8 +60,8 @@ async function contextSession(root: string, requests: TranscriptContext[], facto
 	const { session } = await createAgentSession({ cwd: root, agentDir, resourceLoader, settingsManager, modelRuntime, sessionManager: SessionManager.inMemory(root), tools });
 	const errors: unknown[] = [];
 	await session.bindExtensions({ onError: (error) => errors.push(error) });
-	if (!session.model || session.model.provider !== "facets-context-fixture") {
-		const fixture = modelRuntime.getModel("facets-context-fixture", "fixture");
+	if (!session.model || session.model.provider !== "subagent-context-fixture") {
+		const fixture = modelRuntime.getModel("subagent-context-fixture", "fixture");
 		assert.ok(fixture);
 		await session.setModel(fixture);
 	}
@@ -82,14 +82,14 @@ function assertNativeSections(context: TranscriptContext) {
 	return current.sections;
 }
 
-test("Main uses native prompt assembly and persists only changed Facets sections after reload", async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-context-main-"));
+test("Main uses native prompt assembly and persists only changed Pi Subagent sections after reload", async () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-context-main-"));
 	const previous = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = path.join(root, "agent");
-	const profileDir = path.join(root, "agent", "facets", "profiles");
+	const profileDir = path.join(root, "agent", "subagent", "profiles");
 	fs.mkdirSync(profileDir, { recursive: true });
 	fs.writeFileSync(path.join(profileDir, "reviewer.json"), JSON.stringify({ version: 1, name: "reviewer", tools: ["read"], instructions: "You are a specialized reviewer." }));
-	const mainFile = path.join(root, "agent", "facets", "MAIN.md");
+	const mainFile = path.join(root, "agent", "subagent", "MAIN.md");
 	fs.writeFileSync(mainFile, "Route review tasks to the reviewer.");
 	const requests: TranscriptContext[] = [];
 	let fixture: Awaited<ReturnType<typeof contextSession>> | undefined;
@@ -100,10 +100,10 @@ test("Main uses native prompt assembly and persists only changed Facets sections
 		}, "reviewer");
 		await fixture.session.prompt("First request");
 		const initial = assertNativeSections(requests[0]!);
-		assert.match(initial.facets_profile!, /specialized reviewer/);
-		assert.match(initial.facets_profiles!, /reviewer/);
-		assert.match(initial.facets_main!, /Route review tasks/);
-		assert.equal(initial.facets_sub_protocol, undefined);
+		assert.match(initial.subagent_profile!, /specialized reviewer/);
+		assert.match(initial.subagent_profiles!, /reviewer/);
+		assert.match(initial.subagent_main!, /Route review tasks/);
+		assert.equal(initial.subagent_sub_protocol, undefined);
 		const systemEntries = () => fixture!.session.sessionManager.getBranch().filter((entry) => entry.type === "message" && entry.message.role === "system");
 		const count = systemEntries().length;
 		await fixture.session.prompt("Same configuration");
@@ -112,12 +112,12 @@ test("Main uses native prompt assembly and persists only changed Facets sections
 		await fixture.session.reload();
 		await fixture.session.prompt("Updated configuration");
 		const updated = assertNativeSections(requests[2]!);
-		assert.match(updated.facets_main!, /Delegate every review/);
-		assert.equal(updated.facets_profile, initial.facets_profile);
-		assert.equal(updated.facets_profiles, initial.facets_profiles);
+		assert.match(updated.subagent_main!, /Delegate every review/);
+		assert.equal(updated.subagent_profile, initial.subagent_profile);
+		assert.equal(updated.subagent_profiles, initial.subagent_profiles);
 		const last = systemEntries().at(-1)!;
 		assert.ok(last.type === "message" && last.message.role === "system");
-		assert.deepEqual(Object.keys(last.message.sections ?? {}), ["facets_main"]);
+		assert.deepEqual(Object.keys(last.message.sections ?? {}), ["subagent_main"]);
 		assert.deepEqual(fixture.errors, []);
 	} finally {
 		fixture?.session.dispose();
@@ -129,7 +129,7 @@ test("Main uses native prompt assembly and persists only changed Facets sections
 
 test("Main acknowledges a real SDK delivery only after its session receipt, then drains a closed Sub", async (t) => {
 	t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-context-receipt-"));
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-context-receipt-"));
 	const previous = process.env.XDG_RUNTIME_DIR;
 	process.env.XDG_RUNTIME_DIR = root;
 	const requests: TranscriptContext[] = [];
@@ -181,24 +181,24 @@ test("Main acknowledges a real SDK delivery only after its session receipt, then
 });
 
 test("Sub retains native context and adds only its own instructions and protocol", async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-context-sub-"));
-	const previous = { agent: process.env.PI_CODING_AGENT_DIR, role: process.env.PI_FACETS_ROLE, channel: process.env.PI_FACETS_CHANNEL, token: process.env.PI_FACETS_TOKEN, runtime: process.env.XDG_RUNTIME_DIR };
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-context-sub-"));
+	const previous = { agent: process.env.PI_CODING_AGENT_DIR, role: process.env.PI_SUBAGENT_ROLE, channel: process.env.PI_SUBAGENT_CHANNEL, token: process.env.PI_SUBAGENT_TOKEN, runtime: process.env.XDG_RUNTIME_DIR };
 	process.env.PI_CODING_AGENT_DIR = path.join(root, "agent");
 	process.env.XDG_RUNTIME_DIR = root;
-	const mainDir = path.join(root, "agent", "facets");
+	const mainDir = path.join(root, "agent", "subagent");
 	fs.mkdirSync(mainDir, { recursive: true });
 	fs.writeFileSync(path.join(mainDir, "MAIN.md"), "Main-only instructions must not leak.");
 	const channel = createChannel({ origin: "manual", runId: "context-sub", mainSessionId: "main", title: "Review", task: "Review", cwd: root,
 		profile: { version: 1, name: "reviewer", tools: ["read"], instructions: "Sub-specific role.", source: "global", sourcePath: "/tmp/reviewer.json", resolvedSkills: [], resolvedExtensions: [] },
 	});
-	process.env.PI_FACETS_ROLE = "sub";
-	process.env.PI_FACETS_CHANNEL = channel.channelDir;
-	process.env.PI_FACETS_TOKEN = channel.token;
+	process.env.PI_SUBAGENT_ROLE = "sub";
+	process.env.PI_SUBAGENT_CHANNEL = channel.channelDir;
+	process.env.PI_SUBAGENT_TOKEN = channel.token;
 	const requests: TranscriptContext[] = [];
 	let fixture: Awaited<ReturnType<typeof contextSession>> | undefined;
 	try {
-		const { default: facets } = await import("../src/index.js");
-		fixture = await contextSession(root, requests, facets, undefined, ["read", "talk"]);
+		const { default: subagent } = await import("../src/index.js");
+		fixture = await contextSession(root, requests, subagent, undefined, ["read", "talk"]);
 		assert.ok(fixture.session.getActiveToolNames().includes("talk"));
 		const manifest = readManifest(channel.channelDir);
 		talkToSub(channel.channelDir, manifest, "Initial task from Main");
@@ -210,11 +210,11 @@ test("Sub retains native context and adds only its own instructions and protocol
 		await fixture.session.waitForIdle();
 		assert.equal(fixture.promptHooks.length, 1, "First input via talk must run before_agent_start");
 		const sections = assertNativeSections(requests[0]!);
-		assert.match(sections.facets_profile!, /Sub-specific role/);
-		assert.match(sections.facets_sub_protocol!, /isolated Sub Pi/);
-		assert.match(sections.facets_sub_protocol!, /user-invoked specialist session/);
-		assert.equal(sections.facets_main, undefined);
-		assert.equal(sections.facets_profiles, undefined);
+		assert.match(sections.subagent_profile!, /Sub-specific role/);
+		assert.match(sections.subagent_sub_protocol!, /isolated Sub Pi/);
+		assert.match(sections.subagent_sub_protocol!, /user-invoked specialist session/);
+		assert.equal(sections.subagent_main, undefined);
+		assert.equal(sections.subagent_profiles, undefined);
 		assert.doesNotMatch(JSON.stringify(sections), /Main-only instructions must not leak/);
 		assert.deepEqual(fixture.errors, []);
 		await fixture.session.reload();
@@ -232,14 +232,14 @@ test("Sub retains native context and adds only its own instructions and protocol
 		assert.equal(readTalkReceipt(received[1].message)?.messageId, incoming.id);
 		assert.equal(fixture.promptHooks.length, 2, "Idle talk after reload must reassemble instructions");
 		const followUpSections = assertNativeSections(requests.at(-1)!);
-		assert.match(followUpSections.facets_sub_protocol!, /isolated Sub Pi/);
-		assert.match(followUpSections.facets_profile!, /Sub-specific role/);
+		assert.match(followUpSections.subagent_sub_protocol!, /isolated Sub Pi/);
+		assert.match(followUpSections.subagent_profile!, /Sub-specific role/);
 		assert.deepEqual(fixture.errors, []);
 	} finally {
 		await fixture?.session.extensionRunner?.emit({ type: "session_shutdown", reason: "reload" });
 		fixture?.session.dispose();
 		for (const [key, value] of Object.entries(previous)) {
-			const env = { agent: "PI_CODING_AGENT_DIR", role: "PI_FACETS_ROLE", channel: "PI_FACETS_CHANNEL", token: "PI_FACETS_TOKEN", runtime: "XDG_RUNTIME_DIR" }[key]!;
+			const env = { agent: "PI_CODING_AGENT_DIR", role: "PI_SUBAGENT_ROLE", channel: "PI_SUBAGENT_CHANNEL", token: "PI_SUBAGENT_TOKEN", runtime: "XDG_RUNTIME_DIR" }[key]!;
 			if (value === undefined) delete process.env[env]; else process.env[env] = value;
 		}
 		fs.rmSync(root, { recursive: true, force: true });

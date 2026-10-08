@@ -11,10 +11,10 @@ import type { MainRunManager } from "../src/run-manager.js";
 let root: string;
 let previous: string | undefined;
 beforeEach(() => {
-	root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-manual-commands-"));
+	root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-manual-commands-"));
 	previous = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = path.join(root, "agent");
-	const profiles = path.join(root, "agent", "facets", "profiles");
+	const profiles = path.join(root, "agent", "subagent", "profiles");
 	fs.mkdirSync(profiles, { recursive: true });
 	for (const name of ["review", "model"]) fs.writeFileSync(path.join(profiles, `${name}.json`), JSON.stringify({ version: 1, name, invocation: "manual", sessionPersistence: "persistent", tools: ["read"] }));
 });

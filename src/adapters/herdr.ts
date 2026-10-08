@@ -74,9 +74,9 @@ export class HerdrTabAdapter implements SubSurfaceAdapter {
 			"--workspace", workspaceId,
 			"--cwd", spec.cwd,
 			"--label", label,
-			"--env", "PI_FACETS_ROLE=sub",
-			"--env", `PI_FACETS_CHANNEL=${spec.channelDir}`,
-			"--env", `PI_FACETS_TOKEN=${spec.token}`,
+			"--env", "PI_SUBAGENT_ROLE=sub",
+			"--env", `PI_SUBAGENT_CHANNEL=${spec.channelDir}`,
+			"--env", `PI_SUBAGENT_TOKEN=${spec.token}`,
 			"--no-focus",
 		], { timeout: 15_000, signal });
 		let payload: Record<string, unknown>;
@@ -102,10 +102,10 @@ export class HerdrTabAdapter implements SubSurfaceAdapter {
 				"agent", "start", name, "--kind", "pi", "--pane", paneId, "--timeout", "60000", "--", ...subArgs(spec),
 			], 70_000, "Failed to start Sub Pi in Herdr tab.");
 			await step([
-				"pane", "report-metadata", paneId, "--source", "facets",
-				"--token", "facets_role=sub", "--token", `facets_main_session=${spec.mainSessionId}`,
-				"--token", `facets_run_id=${spec.runId}`, "--token", `facets_profile=${spec.profile.name}`,
-			], 10_000, "Failed to mark the Herdr pane as a Facets Sub.");
+				"pane", "report-metadata", paneId, "--source", "subagent",
+				"--token", "subagent_role=sub", "--token", `subagent_main_session=${spec.mainSessionId}`,
+				"--token", `subagent_run_id=${spec.runId}`, "--token", `subagent_profile=${spec.profile.name}`,
+			], 10_000, "Failed to mark the Herdr pane as a Pi Subagent Sub.");
 			await step(["agent", "prompt", name, spec.task], 20_000, "Failed to submit the delegated task to the Herdr agent.");
 			return handle;
 		} catch (error) {

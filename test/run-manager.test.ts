@@ -13,7 +13,7 @@ let root: string;
 let previousRuntimeDir: string | undefined;
 
 beforeEach(() => {
-	root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-facets-manager-"));
+	root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-manager-"));
 	previousRuntimeDir = process.env.XDG_RUNTIME_DIR;
 	process.env.XDG_RUNTIME_DIR = root;
 });
@@ -24,7 +24,7 @@ afterEach(() => {
 	fs.rmSync(root, { recursive: true, force: true });
 });
 
-function openRun(manager: MainRunManager, runId = "open-run"): RunSnapshot {
+function openRun(manager: MainRunManager, runId = "open-run", mainSessionId = "main-session"): RunSnapshot {
 	const profile = {
 		version: 1 as const,
 		name: "reviewer",
@@ -37,7 +37,7 @@ function openRun(manager: MainRunManager, runId = "open-run"): RunSnapshot {
 	};
 	const channel = createChannel({
 		runId,
-		mainSessionId: "main-session",
+		mainSessionId,
 		title: "Review MR",
 		task: "Review it.",
 		cwd: "/tmp/project",
@@ -60,35 +60,32 @@ function openRun(manager: MainRunManager, runId = "open-run"): RunSnapshot {
 	return run;
 }
 
-test("defaults to active or persistent Subs and can include all open Subs", async () => {
-	const agentDir = path.join(root, "agent");
-	fs.mkdirSync(agentDir);
-	const oldAgentDir = process.env.PI_CODING_AGENT_DIR;
-	process.env.PI_CODING_AGENT_DIR = agentDir;
-	const pi = { exec: async (_command: string, args: string[]) => {
+test("lists all of this Main's open Subs including idle and unknown ephemeral sessions", async () => {
+	const session = SessionManager.inMemory(root);
+	const pi = { on: () => {}, exec: async (_command: string, args: string[]) => {
 		const paneId = args[2];
 		const status = paneId === "w1:p3" ? "working" : paneId === "w1:p4" ? "blocked" : "idle";
 		return { code: 0, stdout: JSON.stringify({ result: { agent: { pane_id: paneId, tab_id: `w1:t${paneId?.slice(-1)}`, agent_status: status } } }), stderr: "" };
 	} } as unknown as ExtensionAPI;
+	const manager = new MainRunManager(pi);
+	manager.start({ sessionManager: session, hasUI: true, ui: { notify: () => {} } } as unknown as ExtensionContext);
 	try {
-		const manager = new MainRunManager(pi);
-		const persistent = openRun(manager);
+		openRun(manager, "open-run", session.getSessionId());
 		for (const [runId, paneId] of [["busy", "w1:p3"], ["blocked", "w1:p4"], ["idle", "w1:p5"]]) {
-			manager.runs.set(runId, { ...persistent, runId, sessionPersistence: "ephemeral", surface: { adapter: "herdr", paneId, tabId: `w1:t${paneId.slice(-1)}` } });
+			const run = openRun(manager, runId, session.getSessionId());
+			run.sessionPersistence = "ephemeral";
+			run.surface = { adapter: "herdr", paneId, tabId: `w1:t${paneId.slice(-1)}` };
 		}
-		manager.runs.set("unknown", { ...persistent, runId: "unknown", sessionPersistence: "ephemeral", surface: undefined });
-		const defaults = await manager.subs();
-		assert.deepEqual(defaults.open.map(({ run, status }) => [run.runId, status]), [
-			["open-run", "idle"], ["busy", "working"], ["blocked", "blocked"],
-		]);
-		const all = await manager.subs(true);
-		assert.deepEqual(all.open.map(({ run, status }) => [run.runId, status]), [
+		const unknown = openRun(manager, "unknown", session.getSessionId());
+		unknown.sessionPersistence = "ephemeral";
+		unknown.surface = undefined;
+		openRun(manager, "foreign", "other-main");
+		const listed = await manager.subs();
+		assert.deepEqual(listed.open.map(({ run, status }) => [run.runId, status]), [
 			["open-run", "idle"], ["busy", "working"], ["blocked", "blocked"], ["idle", "idle"], ["unknown", "unknown"],
 		]);
-	} finally {
-		if (oldAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
-		else process.env.PI_CODING_AGENT_DIR = oldAgentDir;
-	}
+		assert.deepEqual(listed.resumable, []);
+	} finally { manager.shutdown(); }
 });
 
 test("requests interruption only for a current turn and keeps the Sub open", () => {

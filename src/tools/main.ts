@@ -52,23 +52,23 @@ export function registerMainTools(pi: ExtensionAPI, manager: MainRunManager): vo
 		name: "delegate",
 		label: "delegate",
 		exposure: "model-only",
-		description: "Create a fresh, context-isolated Sub Pi in Herdr, or resume a previous persistent Sub session by session ID. The Sub remains open until the Main calls close_sub or the user closes it manually.",
-		promptSnippet: "Create or resume a focused Sub Pi in Herdr with an explicit Facets profile",
+		description: "Create a fresh, context-isolated Sub Pi in Herdr, or resume a closed persistent Sub owned by this Main session. The Sub remains open until the Main calls close_sub or the user closes it manually.",
+		promptSnippet: "Create or resume a focused Sub Pi in Herdr with an explicit Pi Subagent profile",
 		promptGuidelines: [
 			"Use delegate for work assigned by MAIN.md or a separable task that benefits from an independent context; select an explicitly configured profile and provide a short informative title.",
-			"After delegate launches, do not wait or repeatedly poll. Facets will wake the Main when the Sub uses talk.",
+			"After delegate launches, do not wait or repeatedly poll. Pi Subagent will wake the Main when the Sub uses talk.",
 			"For Subs labeled user-invoked specialists, follow up only on the user's task and results. Do not assign unrelated work or substitute them for general consulting profiles. New tasks are initiated by the user through a profile command.",
 			"Use talk to respond to an existing Sub, interrupt_sub to stop its current turn without closing it, and close_sub only after its delivery is accepted or the user asks to close it.",
 		],
 		parameters: Type.Object({
 			title: Type.String({ description: "Short Herdr tab title, up to 48 displayed characters." }),
 			task: Type.String({ description: "Self-contained initial task. Do not assume the Sub can see the Main conversation." }),
-			profile: Type.String({ description: "Configured Facets profile name. Project profiles override same-named global profiles." }),
+			profile: Type.String({ description: "Configured Pi Subagent profile name. Project profiles override same-named global profiles." }),
 			cwd: Type.Optional(Type.String({ description: "Sub working directory; defaults to the Main cwd and is ignored when resuming." })),
-			resumeSessionId: Type.Optional(Type.String({ description: "Exact or unique-prefix Pi session ID of a previous persistent Sub to resume." })),
+			resumeSessionId: Type.Optional(Type.String({ description: "Exact or unique-prefix session ID of a closed persistent Sub owned by this Main; see list_sub." })),
 		}),
 		async execute(_id, params, signal, onUpdate, ctx) {
-			if (manager.runs.size >= MAX_OPEN_SUBS) throw new Error(`Facets allows at most ${MAX_OPEN_SUBS} open Subs.`);
+			if (manager.runs.size >= MAX_OPEN_SUBS) throw new Error(`Pi Subagent allows at most ${MAX_OPEN_SUBS} open Subs.`);
 			const title = normalizeTitle(params.title);
 			const cwd = path.resolve(ctx.cwd, params.cwd ?? ".");
 			const profile = resolveToolExtensions(
@@ -208,14 +208,12 @@ export function registerMainTools(pi: ExtensionAPI, manager: MainRunManager): vo
 
 	pi.registerTool({
 		name: "list_sub",
-		label: "subs",
-		description: "List working or blocked Subs and persistent Sub sessions by default, including closed sessions that can be resumed. Set all=true to include idle or unknown ephemeral Subs. Shows live Herdr status; never returns transcripts.",
-		parameters: Type.Object({
-			all: Type.Optional(Type.Boolean({ description: "Include idle and unknown ephemeral Subs too (default: false)." })),
-		}),
-		async execute(_id, params) {
+		label: "Sub-agents",
+		description: "List only this Main session's Sub-agents: all open Subs, regardless of status, and confirmed-closed persistent sessions that can be resumed. Shows live Herdr status; never returns transcripts or other Mains' sessions.",
+		parameters: Type.Object({}),
+		async execute() {
 			const now = Date.now();
-			const listed = await manager.subs(params.all ?? false);
+			const listed = await manager.subs();
 			const open = listed.open.map(({ run, status }) => ({
 				runId: run.runId,
 				subSessionId: run.subSessionId,
@@ -233,14 +231,16 @@ export function registerMainTools(pi: ExtensionAPI, manager: MainRunManager): vo
 				modifiedSecondsAgo: Math.max(0, Math.round((now - session.modifiedAt) / 1000)),
 			}));
 			const lines = [
+				...(open.length ? ["Open"] : []),
 				...open.map((run) => `- ${run.status} ${run.runId.slice(0, 8)} ${run.title} <${run.profile}, ${run.sessionPersistence}${run.origin === "manual" ? ", user-invoked specialist" : ""}>${run.purpose ? ` Purpose: ${run.purpose}` : ""}`),
+				...(resumable.length ? ["Resumable"] : []),
 				...resumable.map((session) => `- closed ${session.sessionId} ${session.title} <persistent, ${session.origin === "manual" ? "user-invoked; resume via user command" : "resumable"}> cwd=${session.cwd}${session.purpose ? ` Purpose: ${session.purpose}` : ""}`),
 			];
 			if (open.some((run) => run.origin === "manual") || resumable.some((session) => session.origin === "manual")) lines.push(MANUAL_MAIN_GUIDANCE);
-			return { content: [{ type: "text", text: lines.join("\n") || "no Sub sessions." }], details: { open, resumable } };
+			return { content: [{ type: "text", text: lines.join("\n") || "No Sub-agents in this Main session." }], details: { open, resumable } };
 		},
 		renderCall(_args, theme) {
-			return new Text(theme.fg("toolTitle", theme.bold("subs")), 0, 0);
+			return new Text(theme.fg("toolTitle", theme.bold("Sub-agents")), 0, 0);
 		},
 		renderResult(result, _options, theme) {
 			const details = result.details as {
@@ -265,8 +265,9 @@ export function registerMainTools(pi: ExtensionAPI, manager: MainRunManager): vo
 			} | undefined;
 			const open = details?.open ?? [];
 			const resumable = details?.resumable ?? [];
-			if (open.length === 0 && resumable.length === 0) return new Text(theme.fg("muted", "no Sub sessions"), 0, 0);
+			if (open.length === 0 && resumable.length === 0) return new Text(theme.fg("muted", "No Sub-agents in this Main session"), 0, 0);
 			const lines = [
+				...(open.length ? [theme.fg("toolTitle", theme.bold("Open"))] : []),
 				...open.map((run) => {
 					const metadata = [
 						run.runId.slice(0, 8),
@@ -280,6 +281,7 @@ export function registerMainTools(pi: ExtensionAPI, manager: MainRunManager): vo
 					].filter(Boolean).join(" · ");
 					return `${theme.fg("accent", "•")} ${theme.fg("accent", run.title)}\n  ${theme.fg("muted", metadata)}`;
 				}),
+				...(resumable.length ? [theme.fg("toolTitle", theme.bold("Resumable"))] : []),
 				...resumable.map((session) => {
 					const metadata = [
 						session.sessionId.slice(0, 8),

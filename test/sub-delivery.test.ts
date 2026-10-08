@@ -9,14 +9,14 @@ import { createChannel, listTalkToSub, readManifest, talkToSub, writeClose } fro
 // Fake timers exercise the actual Sub poller without wall-clock sleeps.
 test("Sub retains failed messages, isolates protocol errors, and shuts down only once", async (t) => {
 	t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-sub-delivery-"));
-	const previous = { PI_FACETS_CHANNEL: process.env.PI_FACETS_CHANNEL, PI_FACETS_TOKEN: process.env.PI_FACETS_TOKEN, XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR };
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-sub-delivery-"));
+	const previous = { PI_SUBAGENT_CHANNEL: process.env.PI_SUBAGENT_CHANNEL, PI_SUBAGENT_TOKEN: process.env.PI_SUBAGENT_TOKEN, XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR };
 	process.env.XDG_RUNTIME_DIR = root;
 	const channel = createChannel({ runId: "sub", mainSessionId: "main", title: "Sub", task: "Review", cwd: root,
 		profile: { version: 1, name: "reviewer", tools: ["read"], source: "global", sourcePath: "/tmp/profile.json", resolvedSkills: [], resolvedExtensions: [] },
 	});
-	process.env.PI_FACETS_CHANNEL = channel.channelDir;
-	process.env.PI_FACETS_TOKEN = channel.token;
+	process.env.PI_SUBAGENT_CHANNEL = channel.channelDir;
+	process.env.PI_SUBAGENT_TOKEN = channel.token;
 	const manifest = readManifest(channel.channelDir);
 	const session = SessionManager.inMemory(root);
 	const handlers = new Map<string, Array<(...args: any[]) => unknown>>();

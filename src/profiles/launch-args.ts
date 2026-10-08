@@ -7,9 +7,9 @@ function unique(values: readonly string[]): string[] {
 	return [...new Set(values)];
 }
 
-export function subCapabilityArgs(profile: ResolvedProfile, facetsEntryPath: string): string[] {
+export function subCapabilityArgs(profile: ResolvedProfile, subagentEntryPath: string): string[] {
 	const args: string[] = [];
-	for (const extension of unique([...profile.resolvedExtensions, ...MCP_EXTENSIONS]).filter((entry) => entry !== facetsEntryPath)) {
+	for (const extension of unique([...profile.resolvedExtensions, ...MCP_EXTENSIONS]).filter((entry) => entry !== subagentEntryPath)) {
 		args.push("-e", extension);
 	}
 	args.push("--tools", unique([...profile.tools.filter((name) => !isMcpTool(name)), ...SUB_CONTROL_TOOLS, ...MCP_TOOL_SELECTION]).join(","));

@@ -89,14 +89,14 @@ function fixtureTools(pi: ExtensionAPI, executed: string[]) {
 }
 
 test("Sub launch loads its selected extensions plus native MCP support", async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-pi-builtins-"));
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-pi-builtins-"));
 	let main: Awaited<ReturnType<typeof openSession>> | undefined;
 	let sub: typeof main;
 	try {
 		main = await openSession(root, ["builtin:codemode", "builtin:tool-search"]);
 		for (const tools of [["read"], ["read", "codemode"], ["read", "codemode", "tool_search"]]) {
 			const resolved = resolveToolExtensions(profile(tools), main.getAllTools());
-			const args = subCapabilityArgs(resolved, "/tmp/facets.ts");
+			const args = subCapabilityArgs(resolved, "/tmp/subagent.ts");
 			const explicit = args.flatMap((arg, i) => arg === "-e" ? [args[i + 1]!] : []);
 			sub = await openSession(root, explicit);
 			const available = new Set(sub.getAllTools().map((tool) => tool.name));
@@ -115,10 +115,10 @@ test("Sub launch loads its selected extensions plus native MCP support", async (
 });
 
 test("startup profiles select active tools without adding a nested execution policy", async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-pi-selection-"));
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-pi-selection-"));
 	const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = path.join(root, "agent");
-	const profileDir = path.join(root, "agent", "facets", "profiles");
+	const profileDir = path.join(root, "agent", "subagent", "profiles");
 	fs.mkdirSync(profileDir, { recursive: true });
 	fs.writeFileSync(path.join(profileDir, "reviewer.json"), JSON.stringify({ version: 1, name: "reviewer", tools: ["codemode", "nested_probe", "allowed"] }));
 	const executed: string[] = [];
@@ -154,7 +154,7 @@ test("startup profiles select active tools without adding a nested execution pol
 });
 
 test("starting without a profile does not restrict Pi's deferred tools", async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-pi-no-profile-"));
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-pi-no-profile-"));
 	const executed: string[] = [];
 	let session: Awaited<ReturnType<typeof openSession>> | undefined;
 	try {
@@ -172,7 +172,7 @@ test("starting without a profile does not restrict Pi's deferred tools", async (
 });
 
 test("Main delegate stays directly active but is not callable from nested tools", async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-pi-main-control-"));
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-pi-main-control-"));
 	let session: Awaited<ReturnType<typeof openSession>> | undefined;
 	try {
 		session = await openSession(root, [], (pi) => {
@@ -193,8 +193,8 @@ test("Main delegate stays directly active but is not callable from nested tools"
 });
 
 test("Sub keeps native MCP servers, exposure, and resources without profile filtering", async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-pi-sub-mcp-"));
-	const previous = Object.fromEntries(["PI_CODING_AGENT_DIR", "PI_FACETS_CHANNEL", "PI_FACETS_TOKEN", "XDG_RUNTIME_DIR"].map((key) => [key, process.env[key]]));
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-pi-sub-mcp-"));
+	const previous = Object.fromEntries(["PI_CODING_AGENT_DIR", "PI_SUBAGENT_CHANNEL", "PI_SUBAGENT_TOKEN", "XDG_RUNTIME_DIR"].map((key) => [key, process.env[key]]));
 	process.env.PI_CODING_AGENT_DIR = path.join(root, "agent");
 	process.env.XDG_RUNTIME_DIR = root;
 	const command = process.execPath;
@@ -211,15 +211,15 @@ test("Sub keeps native MCP servers, exposure, and resources without profile filt
 		{ name: "read", sourceInfo: { source: "builtin", path: "builtin:read" } },
 	]);
 	const channel = createChannel({ runId: "mcp-sub", mainSessionId: "main", title: "MCP", task: "Review", cwd: root, profile: selectedProfile });
-	process.env.PI_FACETS_CHANNEL = channel.channelDir;
-	process.env.PI_FACETS_TOKEN = channel.token;
-	const launch = subCapabilityArgs(selectedProfile, "/tmp/facets.ts");
+	process.env.PI_SUBAGENT_CHANNEL = channel.channelDir;
+	process.env.PI_SUBAGENT_TOKEN = channel.token;
+	const launch = subCapabilityArgs(selectedProfile, "/tmp/subagent.ts");
 	const extensions = launch.flatMap((arg, index) => arg === "-e" ? [launch[index + 1]!] : []);
 	const tools = launch[launch.indexOf("--tools") + 1]!.split(",");
 	let session: Awaited<ReturnType<typeof openSession>> | undefined;
 	try {
 		const { registerSub } = await import("../src/tools/sub.js");
-		// Empty options select Pi's real mcp.json loader, not a Facets server snapshot.
+		// Empty options select Pi's real mcp.json loader, not a Pi Subagent server snapshot.
 		session = await openSession(root, extensions, registerSub, undefined, tools, {});
 		assert.deepEqual(listTalkToMain(channel.channelDir, readManifest(channel.channelDir)), [], "Pending MCP discovery must not fail Sub initialization");
 		assert.ok(session.getActiveToolNames().includes("talk"));
@@ -253,22 +253,22 @@ test("Sub keeps native MCP servers, exposure, and resources without profile filt
 });
 
 test("Sub startup uses Pi tool selection to keep the registry and Codemode context clean", async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-pi-sub-selection-"));
-	const previous = { channel: process.env.PI_FACETS_CHANNEL, token: process.env.PI_FACETS_TOKEN, runtime: process.env.XDG_RUNTIME_DIR };
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-pi-sub-selection-"));
+	const previous = { channel: process.env.PI_SUBAGENT_CHANNEL, token: process.env.PI_SUBAGENT_TOKEN, runtime: process.env.XDG_RUNTIME_DIR };
 	process.env.XDG_RUNTIME_DIR = root;
 	const channel = createChannel({ runId: "sub-selection", mainSessionId: "main", title: "Review", task: "Review", cwd: root, profile: profile(["codemode", "nested_probe", "allowed"]) });
-	process.env.PI_FACETS_CHANNEL = channel.channelDir;
-	process.env.PI_FACETS_TOKEN = channel.token;
+	process.env.PI_SUBAGENT_CHANNEL = channel.channelDir;
+	process.env.PI_SUBAGENT_TOKEN = channel.token;
 	const executed: string[] = [];
 	let session: Awaited<ReturnType<typeof openSession>> | undefined;
 	try {
 		const { registerSub } = await import("../src/tools/sub.js");
 		// Use the same --tools selection as the real Sub launcher, not only setActiveTools.
-		const args = subCapabilityArgs(channel.profile, "/tmp/facets.ts");
+		const args = subCapabilityArgs(channel.profile, "/tmp/subagent.ts");
 		const selected = args[args.indexOf("--tools") + 1]!.split(",");
 		session = await openSession(root, ["builtin:codemode", "builtin:tool-search", "builtin:mcp"], (pi) => {
 			registerSub(pi);
-			// Registration deliberately happens after Facets\' session_start handler.
+			// Registration deliberately happens after Pi Subagent\' session_start handler.
 			pi.on("session_start", () => { fixtureTools(pi, executed); });
 		}, undefined, selected);
 		const expected = ["codemode", "tool_search", "nested_probe", "allowed", "talk"];
@@ -294,7 +294,7 @@ test("Sub startup uses Pi tool selection to keep the registry and Codemode conte
 		await session?.extensionRunner?.emit({ type: "session_shutdown", reason: "reload" });
 		session?.dispose();
 		for (const [key, value] of Object.entries(previous)) {
-			const env = key === "channel" ? "PI_FACETS_CHANNEL" : key === "token" ? "PI_FACETS_TOKEN" : "XDG_RUNTIME_DIR";
+			const env = key === "channel" ? "PI_SUBAGENT_CHANNEL" : key === "token" ? "PI_SUBAGENT_TOKEN" : "XDG_RUNTIME_DIR";
 			if (value === undefined) delete process.env[env]; else process.env[env] = value;
 		}
 		fs.rmSync(root, { recursive: true, force: true });

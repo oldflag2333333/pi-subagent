@@ -10,7 +10,7 @@ import { deliverTalk } from "../src/talk-delivery.js";
 
 let root: string;
 let previous: string | undefined;
-beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-inbox-state-")); previous = process.env.XDG_RUNTIME_DIR; process.env.XDG_RUNTIME_DIR = root; });
+beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-inbox-state-")); previous = process.env.XDG_RUNTIME_DIR; process.env.XDG_RUNTIME_DIR = root; });
 afterEach(() => { if (previous === undefined) delete process.env.XDG_RUNTIME_DIR; else process.env.XDG_RUNTIME_DIR = previous; fs.rmSync(root, { recursive: true, force: true }); });
 
 function fixture() {

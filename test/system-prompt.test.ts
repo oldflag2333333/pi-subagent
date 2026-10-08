@@ -15,25 +15,25 @@ const nativeSections = { tools: "Native tools", rules: "Native rules", unrelated
 
 test("adds Main catalog and profile instructions as independent sections without replacing native content", () => {
 	const sections = { ...nativeSections } as Record<string, string>;
-	applyStartupPromptSections(sections, profile(), "Available Facets profiles");
+	applyStartupPromptSections(sections, profile(), "Available Pi Subagent profiles");
 	assert.deepEqual(sections, {
 		...nativeSections,
-		facets_profiles: "Available Facets profiles",
-		facets_profile: "## Active Facets profile: reviewer\nFollow the profile instructions.",
+		subagent_profiles: "Available Pi Subagent profiles",
+		subagent_profile: "## Active Pi Subagent profile: reviewer\nFollow the profile instructions.",
 	});
-	applyStartupPromptSections(sections, profile(), "Available Facets profiles");
-	assert.equal(sections.facets_profile.split("Follow the profile instructions.").length, 2);
+	applyStartupPromptSections(sections, profile(), "Available Pi Subagent profiles");
+	assert.equal(sections.subagent_profile.split("Follow the profile instructions.").length, 2);
 });
 
 test("contributes only through normal prompt assembly without a request-local fallback", () => {
 	const handlers = new Map<string, (...args: any[]) => any>();
 	const pi = { on: (event: string, callback: (...args: any[]) => any) => handlers.set(event, callback) } as unknown as ExtensionAPI;
 	let instructions = "Role instructions";
-	bindPromptSections(pi, ["facets_profile"], () => ({ facets_profile: instructions }));
+	bindPromptSections(pi, ["subagent_profile"], () => ({ subagent_profile: instructions }));
 	assert.deepEqual([...handlers.keys()], ["before_agent_start"]);
 	const sections: Record<string, string> = { ...nativeSections };
 	handlers.get("before_agent_start")!({ systemPromptOptions: { sections } });
-	assert.deepEqual(sections, { ...nativeSections, facets_profile: instructions });
+	assert.deepEqual(sections, { ...nativeSections, subagent_profile: instructions });
 	instructions = "";
 	handlers.get("before_agent_start")!({ systemPromptOptions: { sections } });
 	assert.deepEqual(sections, nativeSections);
@@ -41,12 +41,12 @@ test("contributes only through normal prompt assembly without a request-local fa
 
 test("a Main without a selected profile still receives the profile catalog", () => {
 	const sections: Record<string, string> = {};
-	applyStartupPromptSections(sections, undefined, "Available Facets profiles");
-	assert.deepEqual(sections, { facets_profiles: "Available Facets profiles" });
+	applyStartupPromptSections(sections, undefined, "Available Pi Subagent profiles");
+	assert.deepEqual(sections, { subagent_profiles: "Available Pi Subagent profiles" });
 });
 
-test("removes obsolete Facets sections without touching other extensions", () => {
-	const sections: Record<string, string> = { ...nativeSections, facets_profiles: "Old catalog", facets_profile: "Old instructions" };
+test("removes obsolete Pi Subagent sections without touching other extensions", () => {
+	const sections: Record<string, string> = { ...nativeSections, subagent_profiles: "Old catalog", subagent_profile: "Old instructions" };
 	applyStartupPromptSections(sections, undefined, "");
 	assert.deepEqual(sections, nativeSections);
 });
@@ -54,17 +54,17 @@ test("removes obsolete Facets sections without touching other extensions", () =>
 test("adds the mandatory Sub protocol and profile instructions without Main context", () => {
 	const sections = { ...nativeSections } as Record<string, string>;
 	applySubPromptSections(sections, profile());
-	assert.equal(sections.facets_profiles, undefined);
-	assert.equal(sections.facets_main, undefined);
+	assert.equal(sections.subagent_profiles, undefined);
+	assert.equal(sections.subagent_main, undefined);
 	assert.deepEqual(sections, {
 		...nativeSections,
-		facets_sub_protocol: SUB_PROTOCOL,
-		facets_profile: "## Facets profile: reviewer\nFollow the profile instructions.",
+		subagent_sub_protocol: SUB_PROTOCOL,
+		subagent_profile: "## Pi Subagent profile: reviewer\nFollow the profile instructions.",
 	});
 });
 
 test("a Sub without profile instructions still gets its protocol and no stale instructions", () => {
-	const sections: Record<string, string> = { ...nativeSections, facets_profile: "Old instructions" };
+	const sections: Record<string, string> = { ...nativeSections, subagent_profile: "Old instructions" };
 	applySubPromptSections(sections, profile({ instructions: undefined }));
-	assert.deepEqual(sections, { ...nativeSections, facets_sub_protocol: SUB_PROTOCOL });
+	assert.deepEqual(sections, { ...nativeSections, subagent_sub_protocol: SUB_PROTOCOL });
 });

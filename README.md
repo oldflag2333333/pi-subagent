@@ -1,4 +1,4 @@
-# Facets
+# Pi Subagent
 
 English | [简体中文](README.zh-CN.md)
 
@@ -11,28 +11,28 @@ A **profile** defines a specialist's instructions, tools, and optional skills or
 You need **Node.js 22.19+**, **[Pi](https://pi.dev) 1.0.4+**, and **Herdr**. To launch specialists, run Pi inside a Herdr workspace with the `herdr` command available.
 
 ```bash
-pi install npm:pi-facets
+pi install npm:pi-subagent
 ```
 
-Restart Pi or run `/reload`. Facets uses your existing Pi provider credentials; make sure Pi can already run a normal conversation.
+Restart Pi or run `/reload`. Pi Subagent uses your existing Pi provider credentials; make sure Pi can already run a normal conversation.
 
 To update later:
 
 ```bash
-pi update npm:pi-facets
+pi update npm:pi-subagent
 ```
 
 Restart Pi or run `/reload` after updating.
 
 ## Try it: a code reviewer
 
-Facets ships without built-in profiles. Create your first one:
+Pi Subagent ships without built-in profiles. Create your first one:
 
 ```bash
-mkdir -p ~/.pi/agent/facets/profiles/reviewer
+mkdir -p ~/.pi/agent/subagent/profiles/reviewer
 ```
 
-Save this as `~/.pi/agent/facets/profiles/reviewer/config.json`:
+Save this as `~/.pi/agent/subagent/profiles/reviewer/config.json`:
 
 ```json
 {
@@ -75,8 +75,11 @@ Ask the reviewer profile to review src/auth for bugs and missing tests.
 | Check progress | Ask Pi to list its Subs, or open the specialist's Herdr tab |
 | Stop its current task without closing it | Ask Pi to interrupt the Sub |
 | Finish with a specialist | Ask Pi to close the Sub, or close its Herdr tab |
+| Remove communication files left by deleted Main sessions | `/clean-sub` |
 
 Within the same Main session, repeated `/sub:reviewer` commands reuse that profile's open Sub. If it is busy, your next task is queued. Finishing a task does not automatically close the tab.
+
+The **Sub-agents** list shows only assistants created by the current Main: all **Open** Subs (including idle or unknown status) and **Resumable** persistent sessions confirmed closed with saved files still available. Other Main sessions and forks do not inherit them or gain access to resume them. Reloading or resuming the same Main preserves ownership.
 
 To use a profile in your current Pi instead of opening a Sub, start Pi with:
 
@@ -90,8 +93,8 @@ Starting Pi without `--profile` leaves your existing tools, model, and skills un
 
 ### Where profiles live
 
-- **Personal:** `~/.pi/agent/facets/profiles/<name>/`
-- **Project:** `.pi/facets/profiles/<name>/` in your project or an ancestor directory; loaded only when the project is trusted.
+- **Personal:** `~/.pi/agent/subagent/profiles/<name>/`
+- **Project:** `.pi/subagent/profiles/<name>/` in your project or an ancestor directory; loaded only when the project is trusted.
 
 Each directory needs a `config.json`, with a `name` matching the directory name. A nearer project profile replaces a same-named ancestor or personal profile; settings are not merged. Legacy `<name>.json` profiles are also supported.
 
@@ -132,13 +135,19 @@ reviewer/
 
 ### Delegation rules for your main Pi
 
-Use `~/.pi/agent/facets/MAIN.md` or a trusted project's `.pi/facets/MAIN.md` for rules such as:
+Use `~/.pi/agent/subagent/MAIN.md` or a trusted project's `.pi/subagent/MAIN.md` for rules such as:
 
 ```markdown
 Ask the reviewer profile to review code changes before declaring a task complete.
 ```
 
 These instructions apply only to your main Pi, not to its Subs. Keep shared project rules in `AGENTS.md`.
+
+## Clean up deleted sessions
+
+Run `/clean-sub` to immediately delete runtime communication directories whose Main ID is no longer found among saved Pi sessions. It checks the default session store and the current session directory, always preserves the current Main, and creates no index. If session files cannot be read or their headers are invalid, cleanup stops rather than treating them as deleted.
+
+Persistent Sub `.jsonl` files are **not deleted**; remove them manually through Pi's session picker. Profiles and global settings are untouched. The command does not close Herdr tabs. If you moved Main files or use other custom session directories, make them available in the scanned locations before cleaning.
 
 ## Things to know
 
@@ -150,7 +159,7 @@ These instructions apply only to your main Pi, not to its Subs. Keep shared proj
 
 If a profile is missing or fails to start, run `/profiles` first. Check its directory/name match, project trust, and any referenced tools or skills. If Herdr is unavailable, confirm Pi is running inside a Herdr workspace.
 
-To hide or show Facets Subs in Herdr's Agents panel, see the optional [Herdr companion plugin](herdr-plugin/README.md).
+To hide or show Pi Subagent Subs in Herdr's Agents panel, see the optional [Herdr companion plugin](herdr-plugin/README.md).
 
 ## Development
 

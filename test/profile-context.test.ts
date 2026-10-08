@@ -24,7 +24,7 @@ test("builds a concise startup context with the effective profiles", () => {
 		diagnostics: [],
 	};
 	const context = buildProfilesContext(catalog);
-	assert.match(context, /Available Facets delegation profiles/);
+	assert.match(context, /Available Pi Subagent delegation profiles/);
 	assert.match(context, /research \[global, ephemeral\]: Research the web/);
 	assert.match(context, /reviewer \[project, persistent\]: Review this project/);
 	assert.match(context, /delegate\.profile/);

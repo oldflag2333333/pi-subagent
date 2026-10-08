@@ -75,7 +75,7 @@ export async function publishRelease(pkg: ReleasePackage, options: ReleaseOption
 		if (object?.type !== "commit" || object.sha !== options.sha) throw new Error(`Tag ${pkg.tag} already points at another commit; refusing to move it.`);
 	}
 
-	const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "facets-release-"));
+	const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-release-"));
 	try {
 		const [packed] = JSON.parse(deps.run("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", temporary]));
 		if (!packed || typeof packed.filename !== "string" || path.basename(packed.filename) !== packed.filename || typeof packed.integrity !== "string") {

@@ -7,14 +7,13 @@ import { SessionManager, type ExtensionAPI, type ExtensionContext } from "@earen
 import { listTalkToSub, readManifest, talkToMain, writeSubClosed, writeSubSessionInfo } from "../src/channel.js";
 import { MANUAL_MAIN_GUIDANCE } from "../src/manual-context.js";
 import { MainRunManager } from "../src/run-manager.js";
-import { listResumableSubSessions } from "../src/sessions.js";
 import type { ResolvedProfile } from "../src/profiles/types.js";
 
 let root: string;
 let previous: Record<string, string | undefined>;
 const managers: MainRunManager[] = [];
 beforeEach(() => {
-	root = fs.mkdtempSync(path.join(os.tmpdir(), "facets-manual-sub-"));
+	root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-manual-sub-"));
 	previous = Object.fromEntries(["PI_CODING_AGENT_DIR", "XDG_RUNTIME_DIR", "HERDR_ENV", "HERDR_WORKSPACE_ID"].map((key) => [key, process.env[key]]));
 	process.env.PI_CODING_AGENT_DIR = path.join(root, "agent");
 	process.env.XDG_RUNTIME_DIR = root;
@@ -39,7 +38,7 @@ function fixture() {
 	const exec = async (_command: string, args: string[]) => {
 		let payload: unknown = {};
 		if (args[0] === "tab" && args[1] === "create") {
-			channelDir = args.find((arg) => arg.startsWith("PI_FACETS_CHANNEL="))!.slice("PI_FACETS_CHANNEL=".length);
+			channelDir = args.find((arg) => arg.startsWith("PI_SUBAGENT_CHANNEL="))!.slice("PI_SUBAGENT_CHANNEL=".length);
 			payload = { tab: { tab_id: "tab" }, root_pane: { pane_id: "pane" } };
 		}
 		if (args[0] === "tab" && args[1] === "get") {
@@ -105,7 +104,7 @@ test("closed persistent profiles resume the exact session after Main restart", a
 	const created = await first.invoke();
 	await first.manager.close(created.run.runId, "Review accepted");
 	assert.equal(fs.existsSync(created.run.channelDir), false);
-	assert.deepEqual(await listResumableSubSessions(), [], "Do not advertise manual specialists to other Mains");
+	assert.deepEqual(await f.attach().manager.subs(), { open: [], resumable: [] }, "Do not advertise manual specialists to other Mains");
 	const closed = (await first.manager.subs()).resumable;
 	assert.equal(closed[0]?.sessionId, created.run.subSessionId);
 	assert.equal(closed[0]?.origin, "manual");
@@ -205,6 +204,52 @@ test("lost runtime channels are recovered only after Herdr confirms tab closure"
 	await assert.rejects(main.invoke(), /not confirmed closed/);
 	f.gone();
 	assert.equal((await main.invoke()).run.subSessionId, run.subSessionId);
+});
+
+test("ordinary Subs stay owned by their Main across closure, reload, resume, and forks", async () => {
+	const f = fixture();
+	f.profile.invocation = "both";
+	const first = f.attach();
+	const task = { profile: f.profile, cwd: root, title: "Review", task: "Review code" };
+	const created = await first.manager.delegate(task);
+	const second = f.attach();
+	const fork = f.attach(SessionManager.inMemory(root, undefined, first.main.getEntries()));
+	for (const other of [second, fork]) {
+		assert.deepEqual(await other.manager.subs(), { open: [], resumable: [] });
+		await assert.rejects(other.manager.delegate({ ...task, resumeSessionId: created.subSessionId }), /belonging to this Main/);
+	}
+	await first.manager.close(created.runId, "Accepted");
+	assert.equal(fs.existsSync(created.channelDir), false);
+	assert.equal((await first.manager.subs()).resumable[0]?.sessionId, created.subSessionId);
+	assert.deepEqual(await second.manager.subs(), { open: [], resumable: [] });
+	await assert.rejects(second.manager.delegate({ ...task, resumeSessionId: created.subSessionId }), /belonging to this Main/);
+	const closedFork = f.attach(SessionManager.inMemory(root, undefined, first.main.getEntries()));
+	assert.deepEqual(await closedFork.manager.subs(), { open: [], resumable: [] });
+	first.manager.shutdown();
+	const reloaded = f.attach(SessionManager.open(first.main.getSessionFile()!));
+	assert.equal((await reloaded.manager.subs()).resumable[0]?.sessionId, created.subSessionId);
+	const resumed = await reloaded.manager.delegate({ ...task, resumeSessionId: created.subSessionId!.slice(0, 8) });
+	assert.equal(resumed.subSessionId, created.subSessionId);
+	assert.notEqual(resumed.runId, created.runId);
+	assert.equal((await reloaded.manager.subs()).open.length, 1);
+	assert.deepEqual((await reloaded.manager.subs()).resumable, []);
+	await reloaded.manager.close(resumed.runId, "Done again");
+	assert.equal((await reloaded.manager.subs()).resumable.length, 1, "Deduplicate the same persistent session across runs");
+	fs.unlinkSync(resumed.subSessionFile!);
+	assert.deepEqual((await reloaded.manager.subs()).resumable, []);
+});
+
+test("a lost channel without confirmed closure is not listed as resumable after reload", async () => {
+	const f = fixture();
+	f.profile.invocation = "both";
+	const first = f.attach();
+	const task = { profile: f.profile, cwd: root, title: "Review", task: "Review code" };
+	const run = await first.manager.delegate(task);
+	first.manager.shutdown();
+	fs.rmSync(run.channelDir, { recursive: true });
+	const reloaded = f.attach(SessionManager.open(first.main.getSessionFile()!));
+	assert.deepEqual(await reloaded.manager.subs(), { open: [], resumable: [] });
+	await assert.rejects(reloaded.manager.delegate({ ...task, resumeSessionId: run.subSessionId }), /belonging to this Main/);
 });
 
 test("model delegation cannot start manual profiles or resume their sessions under another profile", async () => {
