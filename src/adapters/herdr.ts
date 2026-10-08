@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { subSessionName } from "../manual-context.js";
 import { subCapabilityArgs } from "../profiles/launch-args.js";
+import { subSessionDir } from "../sessions.js";
 import type { SubAgentStatus, SubLaunchSpec, SubSurfaceAdapter, SurfaceHandle } from "../types.js";
 
 function parseEnvelope(stdout: string): Record<string, unknown> {
@@ -39,8 +40,9 @@ function subArgs(spec: SubLaunchSpec): string[] {
 		"--no-extensions",
 		"-e", spec.entryPath,
 		...(fs.existsSync(herdrIntegration) ? ["-e", herdrIntegration] : []),
-		...(spec.profile.sessionPersistence === "persistent" || spec.resumeSessionId ? [] : ["--no-session"]),
-		...(spec.resumeSessionId ? ["--session", spec.resumeSessionId] : []),
+		...(spec.profile.sessionPersistence === "persistent" || spec.resumeSessionId
+			? ["--session-dir", subSessionDir(spec.mainSessionId)] : ["--no-session"]),
+		...(spec.resumeSessionId ? ["--session", spec.resumeSessionFile ?? spec.resumeSessionId] : []),
 		spec.projectTrusted ? "--approve" : "--no-approve",
 		"--name", subSessionName(safeLabel(spec.title), spec.origin),
 		...subCapabilityArgs(spec.profile, spec.entryPath),

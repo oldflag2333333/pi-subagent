@@ -1,5 +1,16 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { RunSnapshot } from "./types.js";
+
+export function subSessionsRoot(): string {
+	return path.join(getAgentDir(), "subagent", "sessions");
+}
+
+export function subSessionDir(mainSessionId: string): string {
+	if (!mainSessionId || mainSessionId === "." || mainSessionId === "..") throw new Error("Invalid Main session ID.");
+	return path.join(subSessionsRoot(), encodeURIComponent(mainSessionId));
+}
 
 export interface ResumableSubSession {
 	sessionId: string;

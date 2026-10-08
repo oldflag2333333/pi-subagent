@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { channelPath, runtimeRoot } from "../channel.js";
+import { subSessionDir, subSessionsRoot } from "../sessions.js";
 
 function entries(directory: string): fs.Dirent[] {
 	try { return fs.readdirSync(directory, { withFileTypes: true }); }
@@ -26,11 +27,16 @@ function sessionId(file: string): string {
 	} finally { fs.closeSync(fd); }
 }
 
-export function cleanSubChannels(currentMainId: string, currentSessionDir: string): { removed: number; errors: string[] } {
-	const root = runtimeRoot();
-	const candidates = entries(root).filter((entry) => entry.isDirectory());
-	if (candidates.length === 0) return { removed: 0, errors: [] };
-	if (fs.lstatSync(root).isSymbolicLink()) throw new Error("Refusing to clean a symlinked runtime directory.");
+export function cleanSubFiles(currentMainId: string, currentSessionDir: string): { removed: number; errors: string[] } {
+	const stores = [
+		{ root: runtimeRoot(), ownerDirectory: (id: string) => path.basename(path.dirname(channelPath(id, "unused"))) },
+		{ root: subSessionsRoot(), ownerDirectory: (id: string) => path.basename(subSessionDir(id)) },
+	].map((store) => {
+		const candidates = entries(store.root).filter((entry) => entry.isDirectory());
+		if (candidates.length && fs.lstatSync(store.root).isSymbolicLink()) throw new Error(`Refusing to clean symlinked directory: ${store.root}`);
+		return { ...store, candidates };
+	});
+	if (stores.every((store) => store.candidates.length === 0)) return { removed: 0, errors: [] };
 
 	const sessionsRoot = path.join(getAgentDir(), "sessions");
 	const directories = new Set([sessionsRoot]);
@@ -46,19 +52,21 @@ export function cleanSubChannels(currentMainId: string, currentSessionDir: strin
 			if (entry.name.endsWith(".jsonl")) live.add(sessionId(path.join(directory, entry.name)));
 		}
 	}
-	const liveDirectories = new Set([...live].map((id) => path.basename(path.dirname(channelPath(id, "unused")))));
 	let removed = 0;
 	const errors: string[] = [];
-	for (const entry of candidates) {
-		if (liveDirectories.has(entry.name)) continue;
-		const directory = path.join(root, entry.name);
-		try {
-			// Do not follow a directory replaced with a symlink during discovery.
-			if (!fs.lstatSync(directory).isDirectory()) continue;
-			fs.rmSync(directory, { recursive: true, force: true });
-			removed++;
-		} catch (error) {
-			errors.push(`${entry.name}: ${error instanceof Error ? error.message : String(error)}`);
+	for (const store of stores) {
+		const liveDirectories = new Set([...live].map(store.ownerDirectory));
+		for (const entry of store.candidates) {
+			if (liveDirectories.has(entry.name)) continue;
+			const directory = path.join(store.root, entry.name);
+			try {
+				// Do not follow a directory replaced with a symlink during discovery.
+				if (!fs.lstatSync(directory).isDirectory()) continue;
+				fs.rmSync(directory, { recursive: true, force: true });
+				removed++;
+			} catch (error) {
+				errors.push(`${directory}: ${error instanceof Error ? error.message : String(error)}`);
+			}
 		}
 	}
 	return { removed, errors };
@@ -66,12 +74,12 @@ export function cleanSubChannels(currentMainId: string, currentSessionDir: strin
 
 export function registerCleanSubCommand(pi: ExtensionAPI): void {
 	pi.registerCommand("clean-sub", {
-		description: "Delete runtime communication files whose Main session can no longer be found; keep persistent Sub sessions.",
+		description: "Delete managed Sub sessions and communication directories whose Main session can no longer be found.",
 		handler: async (_args, ctx) => {
 			try {
-				const result = cleanSubChannels(ctx.sessionManager.getSessionId(), ctx.sessionManager.getSessionDir());
+				const result = cleanSubFiles(ctx.sessionManager.getSessionId(), ctx.sessionManager.getSessionDir());
 				ctx.ui.notify([
-					`Removed ${result.removed} orphaned Main communication directories. Persistent Sub sessions were not deleted.`,
+					`Removed ${result.removed} orphaned Sub data directories (sessions and communication).`,
 					...result.errors,
 				].join("\n"), result.errors.length ? "warning" : "info");
 			} catch (error) {

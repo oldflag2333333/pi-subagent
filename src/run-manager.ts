@@ -226,7 +226,7 @@ export class MainRunManager {
 				cwd,
 				projectTrusted,
 				...(input.origin ? { origin: input.origin } : {}),
-				...(resume ? { resumeSessionId: resume.sessionId } : {}),
+				...(resume ? { resumeSessionId: resume.sessionId, resumeSessionFile: resume.sessionFile } : {}),
 				profile: input.profile,
 				channelDir: channel.channelDir,
 				token: channel.token,

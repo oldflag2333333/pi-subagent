@@ -7,6 +7,8 @@ import { SessionManager, type ExtensionAPI, type ExtensionContext } from "@earen
 import { listTalkToSub, readManifest, talkToMain, writeSubClosed, writeSubSessionInfo } from "../src/channel.js";
 import { MANUAL_MAIN_GUIDANCE } from "../src/manual-context.js";
 import { MainRunManager } from "../src/run-manager.js";
+import { subSessionDir } from "../src/sessions.js";
+import { cleanSubFiles } from "../src/commands/clean-sub.js";
 import type { ResolvedProfile } from "../src/profiles/types.js";
 
 let root: string;
@@ -31,7 +33,6 @@ afterEach(() => {
 function fixture() {
 	const profile: ResolvedProfile = { version: 1, name: "review", invocation: "manual", description: "Review a user-specified MR, not architecture consulting", sessionPersistence: "persistent", tools: ["read"], source: "global", sourcePath: "/tmp/review.json", resolvedSkills: [], resolvedExtensions: [] };
 	const starts: Array<{ args: string[]; session: SessionManager }> = [];
-	const sessions = new Map<string, SessionManager>();
 	let channelDir = "";
 	let status = "idle";
 	let gone = false;
@@ -48,11 +49,12 @@ function fixture() {
 		if (args[0] === "agent" && args[1] === "start") {
 			gone = false;
 			const resumeIndex = args.indexOf("--session");
-			const sub = resumeIndex >= 0 ? sessions.get(args[resumeIndex + 1]!)! : SessionManager.create(root);
+			const dirIndex = args.indexOf("--session-dir");
+			const directory = dirIndex >= 0 ? args[dirIndex + 1] : undefined;
+			const sub = resumeIndex >= 0 ? SessionManager.open(args[resumeIndex + 1]!, directory) : SessionManager.create(root, directory);
 			assert.ok(sub);
 			sub.appendSessionInfo(args[args.indexOf("--name") + 1]!);
 			sub.appendMessage({ role: "user", content: "Fixture Sub task", timestamp: Date.now() });
-			sessions.set(sub.getSessionId(), sub);
 			writeSubSessionInfo(channelDir, readManifest(channelDir), { sessionId: sub.getSessionId(), sessionFile: sub.getSessionFile()! });
 			starts.push({ args, session: sub });
 		}
@@ -84,6 +86,7 @@ test("manual invocations serialize creation, reuse busy Subs, and survive Main r
 	assert.equal(created.action, "created");
 	assert.equal(queued.action, "queued");
 	assert.equal(created.run.subSessionId, queued.run.subSessionId);
+	assert.equal(path.dirname(created.run.subSessionFile!), subSessionDir(first.main.getSessionId()));
 	assert.equal(f.starts.length, 1);
 	assert.equal(readManifest(created.run.channelDir).origin, "manual");
 	assert.ok(f.starts[0]!.args.includes("[sub:manual] review"));
@@ -115,7 +118,8 @@ test("closed persistent profiles resume the exact session after Main restart", a
 	assert.notEqual(resumed.run.runId, created.run.runId);
 	assert.equal(resumed.run.subSessionId, created.run.subSessionId);
 	assert.equal(f.starts.length, 2);
-	assert.equal(f.starts[1]!.args[f.starts[1]!.args.indexOf("--session") + 1], created.run.subSessionId);
+	assert.equal(f.starts[1]!.args[f.starts[1]!.args.indexOf("--session") + 1], created.run.subSessionFile);
+	assert.equal(path.dirname(resumed.run.subSessionFile!), subSessionDir(first.main.getSessionId()));
 });
 
 test("manual tab closure retains pending results and their specialist routing guidance", async () => {
@@ -250,6 +254,23 @@ test("a lost channel without confirmed closure is not listed as resumable after 
 	const reloaded = f.attach(SessionManager.open(first.main.getSessionFile()!));
 	assert.deepEqual(await reloaded.manager.subs(), { open: [], resumable: [] });
 	await assert.rejects(reloaded.manager.delegate({ ...task, resumeSessionId: run.subSessionId }), /belonging to this Main/);
+});
+
+test("deleting a Main lets /clean-sub remove its persistent Sub directory without an index", async () => {
+	const f = fixture();
+	const owner = f.attach();
+	const { run } = await owner.invoke();
+	await owner.manager.close(run.runId, "Done");
+	owner.manager.shutdown();
+	const current = f.attach();
+	const { run: live } = await current.invoke();
+	assert.equal(cleanSubFiles(current.main.getSessionId(), current.main.getSessionDir()).removed, 0);
+	fs.unlinkSync(owner.main.getSessionFile()!);
+	assert.equal(cleanSubFiles(current.main.getSessionId(), current.main.getSessionDir()).removed, 2);
+	assert.equal(fs.existsSync(subSessionDir(owner.main.getSessionId())), false);
+	assert.equal(fs.existsSync(run.subSessionFile!), false);
+	assert.ok(fs.existsSync(live.subSessionFile!));
+	assert.ok(fs.existsSync(live.channelDir));
 });
 
 test("model delegation cannot start manual profiles or resume their sessions under another profile", async () => {

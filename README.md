@@ -75,7 +75,7 @@ Ask the reviewer profile to review src/auth for bugs and missing tests.
 | Check progress | Ask Pi to list its Subs, or open the specialist's Herdr tab |
 | Stop its current task without closing it | Ask Pi to interrupt the Sub |
 | Finish with a specialist | Ask Pi to close the Sub, or close its Herdr tab |
-| Remove communication files left by deleted Main sessions | `/clean-sub` |
+| Remove Sub sessions and communication files left by deleted Mains | `/clean-sub` |
 
 Within the same Main session, repeated `/sub:reviewer` commands reuse that profile's open Sub. If it is busy, your next task is queued. Finishing a task does not automatically close the tab.
 
@@ -145,9 +145,15 @@ These instructions apply only to your main Pi, not to its Subs. Keep shared proj
 
 ## Clean up deleted sessions
 
-Run `/clean-sub` to immediately delete runtime communication directories whose Main ID is no longer found among saved Pi sessions. It checks the default session store and the current session directory, always preserves the current Main, and creates no index. If session files cannot be read or their headers are invalid, cleanup stops rather than treating them as deleted.
+Persistent Sub histories are grouped by their owning Main, using Pi's native `--session-dir`:
 
-Persistent Sub `.jsonl` files are **not deleted**; remove them manually through Pi's session picker. Profiles and global settings are untouched. The command does not close Herdr tabs. If you moved Main files or use other custom session directories, make them available in the scanned locations before cleaning.
+```text
+~/.pi/agent/subagent/sessions/<main-session-id>/*.jsonl
+```
+
+Run `/clean-sub` to immediately delete both the Sub session directory and runtime communication directory for any Main ID no longer found among saved Pi sessions. It checks Pi's default session store and the current session directory, always preserves the current Main, and creates no index. Unreadable session files or invalid headers stop cleanup instead of being treated as deleted.
+
+Close any orphaned Sub tabs before cleaning; the command only deletes files. Profiles and global settings are untouched. Older Sub files outside the managed directory still need manual deletion. If you moved Main files or use other custom session directories, make them available in the scanned locations before cleaning.
 
 ## Things to know
 

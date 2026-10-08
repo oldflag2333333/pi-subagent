@@ -97,6 +97,8 @@ export interface SubLaunchSpec {
 	projectTrusted: boolean;
 	origin?: "manual";
 	resumeSessionId?: string;
+	/** Recorded path also supports sessions saved before per-Main directories. */
+	resumeSessionFile?: string;
 	profile: ResolvedProfile;
 	channelDir: string;
 	token: string;

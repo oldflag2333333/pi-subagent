@@ -5,7 +5,8 @@ import * as path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { channelPath, runtimeRoot } from "../src/channel.js";
-import { cleanSubChannels, registerCleanSubCommand } from "../src/commands/clean-sub.js";
+import { subSessionDir, subSessionsRoot } from "../src/sessions.js";
+import { cleanSubFiles, registerCleanSubCommand } from "../src/commands/clean-sub.js";
 
 let root: string;
 let previous: Record<string, string | undefined>;
@@ -51,13 +52,46 @@ test("removes all orphaned communication files but retains existing and current 
 	const config = path.join(root, "agent", "subagent", "profiles", "reviewer", "instructions.md");
 	fs.mkdirSync(path.dirname(config), { recursive: true });
 	fs.writeFileSync(config, "Keep this role.");
-	assert.deepEqual(cleanSubChannels("current-main", ""), { removed: 1, errors: [] });
+	assert.deepEqual(cleanSubFiles("current-main", ""), { removed: 1, errors: [] });
 	assert.equal(fs.existsSync(path.dirname(orphan)), false);
 	assert.ok(fs.existsSync(live));
 	assert.ok(fs.existsSync(current));
 	assert.ok(fs.existsSync(subFile));
 	assert.equal(fs.readFileSync(config, "utf8"), "Keep this role.");
-	assert.deepEqual(cleanSubChannels("current-main", ""), { removed: 0, errors: [] });
+	assert.deepEqual(cleanSubFiles("current-main", ""), { removed: 0, errors: [] });
+});
+
+test("removes orphaned managed sessions even when no runtime directory remains", () => {
+	const orphan = session("sub-gone", subSessionDir("gone-main"));
+	const current = session("sub-current", subSessionDir("current-main"));
+	const saved = session("sub-saved", subSessionDir("saved-main"));
+	session("saved-main");
+	const legacy = session("legacy-sub");
+	assert.equal(fs.existsSync(runtimeRoot()), false);
+	assert.deepEqual(cleanSubFiles("current-main", ""), { removed: 1, errors: [] });
+	assert.equal(fs.existsSync(path.dirname(orphan)), false);
+	assert.ok(fs.existsSync(current));
+	assert.ok(fs.existsSync(saved));
+	assert.ok(fs.existsSync(legacy), "Never guess ownership of sessions outside the managed store");
+	assert.deepEqual(cleanSubFiles("current-main", ""), { removed: 0, errors: [] });
+});
+
+test("removes both owned directories and does not count a Sub file as its deleted Main", () => {
+	channel("gone-main");
+	session("gone-main", subSessionDir("gone-main"));
+	assert.deepEqual(cleanSubFiles("current-main", ""), { removed: 2, errors: [] });
+	assert.equal(fs.existsSync(subSessionDir("gone-main")), false);
+});
+
+test("a symlinked managed session root aborts cleanup before any deletion", () => {
+	const outside = path.join(root, "outside");
+	fs.mkdirSync(path.join(outside, "keep"), { recursive: true });
+	fs.mkdirSync(path.dirname(subSessionsRoot()), { recursive: true });
+	fs.symlinkSync(outside, subSessionsRoot(), "dir");
+	const orphan = channel("gone");
+	assert.throws(() => cleanSubFiles("current", ""), /symlinked directory/);
+	assert.ok(fs.existsSync(orphan));
+	assert.ok(fs.existsSync(path.join(outside, "keep")));
 });
 
 test("checks all default projects plus the current custom session directory", () => {
@@ -67,7 +101,7 @@ test("checks all default projects plus the current custom session directory", ()
 	session("custom-main", custom);
 	const customChannel = channel("custom-main");
 	const orphan = channel("gone");
-	assert.equal(cleanSubChannels("current", custom).removed, 1);
+	assert.equal(cleanSubFiles("current", custom).removed, 1);
 	assert.ok(fs.existsSync(other));
 	assert.ok(fs.existsSync(customChannel));
 	assert.equal(fs.existsSync(orphan), false);
@@ -75,10 +109,12 @@ test("checks all default projects plus the current custom session directory", ()
 
 test("aborts before any deletion when session discovery encounters an invalid header", () => {
 	const orphan = channel("gone");
+	const persistent = session("sub", subSessionDir("gone"));
 	const corrupt = session("corrupt");
 	fs.writeFileSync(corrupt, "{broken\n");
-	assert.throws(() => cleanSubChannels("current", ""), /Cannot inspect session/);
+	assert.throws(() => cleanSubFiles("current", ""), /Cannot inspect session/);
 	assert.ok(fs.existsSync(orphan));
+	assert.ok(fs.existsSync(persistent));
 });
 
 test("does not mistake an unreadable session path for a deleted Main", () => {
@@ -86,7 +122,7 @@ test("does not mistake an unreadable session path for a deleted Main", () => {
 	const file = session("unreadable");
 	fs.unlinkSync(file);
 	fs.mkdirSync(file);
-	assert.throws(() => cleanSubChannels("current", ""));
+	assert.throws(() => cleanSubFiles("current", ""));
 	assert.ok(fs.existsSync(orphan));
 });
 
@@ -98,13 +134,13 @@ test("does not follow symlinks out of the runtime directory", () => {
 	fs.symlinkSync(outside, path.join(runtimeRoot(), "symlink-main"), "dir");
 	const orphan = channel("gone");
 	fs.symlinkSync(outside, path.join(orphan, "linked"), "dir");
-	assert.equal(cleanSubChannels("current", "").removed, 1);
+	assert.equal(cleanSubFiles("current", "").removed, 1);
 	assert.equal(fs.readFileSync(path.join(outside, "important"), "utf8"), "keep");
 	assert.ok(fs.lstatSync(path.join(runtimeRoot(), "symlink-main")).isSymbolicLink());
 });
 
 test("an absent runtime directory is a no-op without creating an index", () => {
-	assert.deepEqual(cleanSubChannels("current", ""), { removed: 0, errors: [] });
+	assert.deepEqual(cleanSubFiles("current", ""), { removed: 0, errors: [] });
 	assert.equal(fs.existsSync(path.join(root, "agent", "subagent")), false);
 });
 
@@ -122,6 +158,6 @@ test("/clean-sub runs directly without a confirmation or model turn", async () =
 		ui: { notify: (message: string) => notifications.push(message) },
 	} as unknown as ExtensionCommandContext);
 	assert.equal(fs.existsSync(orphan), false);
-	assert.match(notifications[0]!, /Removed 1 orphaned Main/);
-	assert.match(notifications[0]!, /Persistent Sub sessions were not deleted/);
+	assert.match(notifications[0]!, /Removed 1 orphaned Sub data/);
+	assert.match(notifications[0]!, /sessions and communication/);
 });

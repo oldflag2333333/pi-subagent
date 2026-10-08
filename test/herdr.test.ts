@@ -6,6 +6,7 @@ import { test } from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { HerdrLaunchCleanupError, HerdrTabAdapter } from "../src/adapters/herdr.js";
 import type { SubLaunchSpec } from "../src/types.js";
+import { subSessionDir } from "../src/sessions.js";
 
 const spec: SubLaunchSpec = {
 	runId: "12345678-abcd-4000-8000-123456789abc",
@@ -29,6 +30,37 @@ const spec: SubLaunchSpec = {
 		resolvedExtensions: ["/tmp/web.ts"],
 	},
 };
+
+test("fresh persistent Subs use their Main's directory while ephemeral Subs remain in memory", async () => {
+	const previous = process.env.HERDR_WORKSPACE_ID;
+	process.env.HERDR_WORKSPACE_ID = "w1";
+	const starts: string[][] = [];
+	const pi = { exec: async (_command: string, args: string[]) => {
+		if (args[1] === "create") return { code: 0, stdout: JSON.stringify({ tab: { tab_id: "tab" }, root_pane: { pane_id: "pane" } }), stderr: "", killed: false };
+		if (args[1] === "start") starts.push(args);
+		return { code: 0, stdout: "{}", stderr: "", killed: false };
+	} } as unknown as ExtensionAPI;
+	try {
+		const adapter = new HerdrTabAdapter(pi);
+		for (const mainSessionId of ["main-a", "main-b"]) {
+			await adapter.launch({ ...spec, mainSessionId, resumeSessionId: undefined });
+			const args = starts.at(-1)!;
+			assert.equal(args[args.indexOf("--session-dir") + 1], subSessionDir(mainSessionId));
+			assert.equal(args.includes("--session"), false);
+			assert.equal(args.includes("--no-session"), false);
+		}
+		await adapter.launch({ ...spec, resumeSessionId: undefined, profile: { ...spec.profile, sessionPersistence: "ephemeral" } });
+		assert.ok(starts.at(-1)!.includes("--no-session"));
+		assert.equal(starts.at(-1)!.includes("--session-dir"), false);
+		await adapter.launch({ ...spec, resumeSessionFile: "/old/sessions/saved.jsonl" });
+		const resumed = starts.at(-1)!;
+		assert.equal(resumed[resumed.indexOf("--session") + 1], "/old/sessions/saved.jsonl");
+		assert.equal(resumed[resumed.indexOf("--session-dir") + 1], subSessionDir(spec.mainSessionId));
+	} finally {
+		if (previous === undefined) delete process.env.HERDR_WORKSPACE_ID;
+		else process.env.HERDR_WORKSPACE_ID = previous;
+	}
+});
 
 test("reads live agent status by pane and does not guess on errors or mismatches", async () => {
 	let stdout = JSON.stringify({ result: { agent: { pane_id: "w1:p2", tab_id: "w1:t2", agent_status: "working" } } });
@@ -188,6 +220,7 @@ test("starts an idle Pi before submitting work through herdr agent prompt", asyn
 		assert.equal(start.args.includes(spec.task), false);
 		assert.equal(start.args.includes(integration), true);
 		assert.equal(start.args.includes("--no-session"), false);
+		assert.deepEqual(start.args.slice(start.args.indexOf("--session-dir"), start.args.indexOf("--session-dir") + 2), ["--session-dir", subSessionDir(spec.mainSessionId)]);
 		assert.deepEqual(start.args.slice(start.args.indexOf("--session"), start.args.indexOf("--session") + 2), ["--session", "session-to-resume"]);
 		assert.equal(start.args.includes("--approve"), true);
 		assert.equal(start.args.includes("--no-approve"), false);
