@@ -11,7 +11,7 @@ A **profile** defines a specialist's instructions, tools, and optional skills or
 You need **Node.js 22.19+**, **[Pi](https://pi.dev) 1.0.4+**, and **Herdr**. To launch specialists, run Pi inside a Herdr workspace with the `herdr` command available.
 
 ```bash
-pi install npm:pi-subagent
+pi install npm:@oldflag2333333/pi-subagent
 ```
 
 Restart Pi or run `/reload`. Pi Subagent uses your existing Pi provider credentials; make sure Pi can already run a normal conversation.
@@ -19,7 +19,7 @@ Restart Pi or run `/reload`. Pi Subagent uses your existing Pi provider credenti
 To update later:
 
 ```bash
-pi update npm:pi-subagent
+pi update npm:@oldflag2333333/pi-subagent
 ```
 
 Restart Pi or run `/reload` after updating.
@@ -156,6 +156,8 @@ Run `/clean-sub` to immediately delete both the Sub session directory and runtim
 Close any orphaned Sub tabs before cleaning; the command only deletes files. Profiles and global settings are untouched. Older Sub files outside the managed directory still need manual deletion. If you moved Main files or use other custom session directories, make them available in the scanned locations before cleaning.
 
 ## Things to know
+
+Message delivery uses custom inbox cards. See [messaging behavior and the known Pi 1.0.4/1.1.0 limitation](docs/messaging.md).
 
 - **Herdr is required for Subs.** There is no headless fallback. Up to four Subs can be open at once, and Subs cannot delegate further.
 - **Profiles are not a sandbox.** Subs run as your OS user. A read-only role is not a filesystem permission boundary.

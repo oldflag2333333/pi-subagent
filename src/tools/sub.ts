@@ -154,7 +154,7 @@ export function registerSub(pi: ExtensionAPI): void {
 		return sections;
 	});
 
-	// Preserve rendering for legacy custom messages in resumed sessions.
+	// Render live deliveries and saved custom messages with the same inbox card.
 	pi.registerMessageRenderer(MESSAGE_TYPE, (message, options, theme) => {
 		const details = message.details as { title?: string; message?: string } | undefined;
 		const title = details?.title ?? loaded.manifest.title;

@@ -17,7 +17,18 @@ Ordinary code/dependency changes with no version increase do not publish. Neithe
 
 ### One-time npm setup
 
-In the npm settings for **pi-subagent**, add a **GitHub Actions Trusted Publisher**:
+For a new package, publish the initial version once after committing and checking the source:
+
+```bash
+npm ci
+npm run check
+npm login
+npm publish --access public --ignore-scripts
+```
+
+This bootstrap publish creates the package so its trusted publisher can be configured. Subsequent releases use the workflow below, not local `npm publish`.
+
+In the npm settings for **@oldflag2333333/pi-subagent**, add a **GitHub Actions Trusted Publisher**:
 
 | Setting | Value |
 | --- | --- |

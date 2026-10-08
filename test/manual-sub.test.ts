@@ -67,7 +67,7 @@ function fixture() {
 		const pi = {
 			on: () => () => {}, exec,
 			appendEntry: (type: string, data: unknown) => main.appendCustomEntry(type, data),
-			sendUserMessage: (content: string) => { delivered.push(content); main.appendMessage({ role: "user", content, timestamp: Date.now() }); },
+			sendMessage: (message: any) => { delivered.push(message.content); main.appendCustomMessageEntry(message.customType, message.content, message.display, message.details); },
 		} as unknown as ExtensionAPI;
 		const ctx = { cwd: root, model: {}, sessionManager: main, isIdle: () => true, isProjectTrusted: () => true, hasUI: true, ui: { notify: () => {} } } as unknown as ExtensionContext;
 		const manager = new MainRunManager(pi);

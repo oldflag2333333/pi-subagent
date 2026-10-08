@@ -5,13 +5,14 @@ import * as path from "node:path";
 import { test } from "node:test";
 import { createAssistantMessageEventStream, getCurrentSystemMessage, type AssistantMessage, type TranscriptContext } from "@earendil-works/pi-ai";
 import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, type ExtensionContext, type ExtensionUIContext } from "@earendil-works/pi-coding-agent";
-import { createChannel, readManifest, talkToMain } from "../src/channel.js";
+import { createChannel, MESSAGE_TYPE, readManifest, talkToMain } from "../src/channel.js";
 import { bindPromptSections } from "../src/profiles/system-prompt.js";
+import { CHANNEL_DEBOUNCE_MS, CHANNEL_RESCAN_MS } from "../src/channel-monitor.js";
 import { MainRunManager, RUN_ENTRY } from "../src/run-manager.js";
-import { readTalkReceipt } from "../src/talk-message.js";
 
 async function until(condition: () => boolean): Promise<void> {
-	const deadline = Date.now() + 2500;
+	// Native filesystem notifications may be missed; allow the monitor's fallback scan.
+	const deadline = Date.now() + CHANNEL_RESCAN_MS + CHANNEL_DEBOUNCE_MS + 2000;
 	while (!condition() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
 	assert.ok(condition(), "Timed out waiting for queue transition");
 }
@@ -27,6 +28,7 @@ async function fixture(root: string) {
 	let manager: MainRunManager;
 	let context: ExtensionContext;
 	let finishFirst: (() => void) | undefined;
+	let holdRequest = 1;
 	const ui = { notify: () => {}, setStatus: () => {}, setTitle: () => {} } as unknown as ExtensionUIContext;
 	const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } });
 	const resourceLoader = new DefaultResourceLoader({
@@ -62,7 +64,7 @@ async function fixture(root: string) {
 						}
 						stream.end(message);
 					};
-					if (requests.length === 1) {
+					if (requests.length === holdRequest) {
 						finishFirst = () => finish();
 						options?.signal?.addEventListener("abort", () => finish(true), { once: true });
 					} else finish();
@@ -95,51 +97,89 @@ async function fixture(root: string) {
 	manager!.start(context!);
 	return { session, channel, requests, errors, promptHooks, inputSources,
 		rescan: () => manager.start(context), finish: () => finishFirst!(),
+		holdNext: () => { holdRequest = requests.length + 1; },
 		setInstructions: (value: string) => { instructions = value; },
 		stop: () => manager.shutdown(),
-		inboxEntries: () => session.sessionManager.getEntries().filter((entry) => entry.type === "message" && readTalkReceipt(entry.message) !== undefined),
+		inboxEntries: () => session.sessionManager.getEntries().filter((entry) => entry.type === "custom_message" && entry.customType === MESSAGE_TYPE),
 	};
 }
 
-test("idle talk bursts use normal input hooks, then reassemble changed sections after reload", async () => {
+test("idle custom talk bursts preserve ordering and survive reload", async () => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-idle-queue-sdk-"));
 	const previous = process.env.XDG_RUNTIME_DIR;
 	process.env.XDG_RUNTIME_DIR = root;
 	let f: Awaited<ReturnType<typeof fixture>> | undefined;
 	try {
 		f = await fixture(root);
+		const initial = f.session.prompt("Initial Main task");
+		await until(() => f!.requests.length === 1);
+		f.finish();
+		await initial;
+		f.holdNext();
 		const first = talkToMain(f.channel.channelDir, readManifest(f.channel.channelDir), "First idle delivery");
 		const second = talkToMain(f.channel.channelDir, readManifest(f.channel.channelDir), "Second idle delivery");
 		f.rescan(); f.rescan();
-		await until(() => f!.requests.length === 1 && f!.session.getFollowUpMessages().length === 1);
-		assert.equal(f.promptHooks.length, 1, "Do not start concurrent prompts during asynchronous preflight");
-		assert.deepEqual(f.inputSources, ["extension", "extension"]);
+		await until(() => f!.requests.length === 2 && f!.session.agent.peekQueuedMessages().length === 1);
+		assert.deepEqual(f.inputSources, ["interactive"]);
+		assert.deepEqual(f.session.getFollowUpMessages(), [], "Custom follow-ups are not user editor input");
 		assert.equal(f.inboxEntries().length, 1);
 		f.finish();
-		await until(() => f!.requests.length === 2 && !fs.existsSync(path.join(f!.channel.channelDir, "to-main", second.id + ".json")));
+		await until(() => f!.requests.length === 3 && !fs.existsSync(path.join(f!.channel.channelDir, "to-main", second.id + ".json")));
 		await f.session.waitForIdle();
-		assert.equal(f.inboxEntries().length, 2);
-		const ids = f.inboxEntries().map((entry) => entry.type === "message" ? readTalkReceipt(entry.message)?.messageId : undefined);
+		const ids = f.inboxEntries().map((entry) => entry.type === "custom_message" ? (entry.details as { messageId: string }).messageId : undefined);
 		assert.deepEqual(ids, [first.id, second.id]);
-		assert.equal(f.promptHooks.length, 1, "Native busy follow-ups reuse the current run's sections");
 
 		f.setInstructions("Updated role after reload");
 		await f.session.reload();
 		const third = talkToMain(f.channel.channelDir, readManifest(f.channel.channelDir), "/skill:not-a-command");
-		f.rescan();
-		await until(() => f!.requests.length === 3 && !fs.existsSync(path.join(f!.channel.channelDir, "to-main", third.id + ".json")));
+		f.rescan(); f.rescan();
+		await until(() => f!.requests.length === 4 && !fs.existsSync(path.join(f!.channel.channelDir, "to-main", third.id + ".json")));
 		await f.session.waitForIdle();
-		assert.equal(f.promptHooks.length, 2);
-		assert.ok(f.promptHooks[1]!.includes("/skill:not-a-command"));
+		assert.deepEqual(f.inputSources, ["interactive"]);
 		assert.equal(f.inboxEntries().length, 3);
-		for (const request of f.requests.slice(0, 2)) {
+		assert.match(JSON.stringify(f.requests[3]!.messages), /\/skill:not-a-command/);
+
+		const hooksBeforePrompt = f.promptHooks.length;
+		await f.session.prompt("Apply updated configuration");
+		assert.equal(f.promptHooks.length, hooksBeforePrompt + 1);
+		assert.match(getCurrentSystemMessage(f.requests[4]!.messages)?.sections?.subagent_fixture ?? "", /Updated role after reload/);
+		assert.deepEqual(f.errors, []);
+	} finally {
+		await f?.session.abort();
+		f?.stop();
+		f?.session.dispose();
+		if (previous === undefined) delete process.env.XDG_RUNTIME_DIR; else process.env.XDG_RUNTIME_DIR = previous;
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+// Keep the desired Pi contract executable, without baking its current bug into
+// plugin behavior. Remove todo once upstream #10267/#5581 is fixed.
+test("upstream: idle custom wakes retain profile sections through subsequent turns", {
+	todo: "Pi 1.0.4/1.1.0: https://github.com/earendil-works/pi/issues/10267",
+}, async () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-upstream-prompt-"));
+	const previous = process.env.XDG_RUNTIME_DIR;
+	process.env.XDG_RUNTIME_DIR = root;
+	let f: Awaited<ReturnType<typeof fixture>> | undefined;
+	try {
+		f = await fixture(root);
+		const initial = f.session.prompt("Initialize profile");
+		await until(() => f!.requests.length === 1);
+		f.finish();
+		await initial;
+		f.holdNext();
+		talkToMain(f.channel.channelDir, readManifest(f.channel.channelDir), "Wake while idle");
+		f.rescan();
+		await until(() => f!.requests.length === 2);
+		talkToMain(f.channel.channelDir, readManifest(f.channel.channelDir), "Continue in the same run");
+		f.rescan();
+		f.finish();
+		await until(() => f!.requests.length === 3);
+		await f.session.waitForIdle();
+		for (const request of f.requests) {
 			assert.match(getCurrentSystemMessage(request.messages)?.sections?.subagent_fixture ?? "", /Fixture role instructions/);
 		}
-		assert.match(getCurrentSystemMessage(f.requests[2]!.messages)?.sections?.subagent_fixture ?? "", /Updated role after reload/);
-		const savedSystem = f.session.sessionManager.getBranch().flatMap((entry) => entry.type === "message" && entry.message.role === "system" ? [entry.message] : []);
-		assert.match(getCurrentSystemMessage(savedSystem)?.sections?.subagent_fixture ?? "", /Updated role after reload/,
-			"Sections must be recorded by Pi, not injected through a request-local fallback");
-		assert.deepEqual(f.errors, []);
 	} finally {
 		await f?.session.abort();
 		f?.stop();
@@ -161,13 +201,13 @@ for (const mode of ["reload", "cancel-clear"]) {
 			initial = f.session.prompt("Current Main task");
 			await until(() => f!.requests.length === 1);
 			const message = talkToMain(f.channel.channelDir, readManifest(f.channel.channelDir), "Queued reply from Sub");
-			await until(() => f!.session.agent.peekQueuedMessages().some((queued) => readTalkReceipt(queued)?.messageId === message.id));
+			await until(() => f!.session.agent.peekQueuedMessages().some((queued) => queued.role === "custom" && queued.customType === MESSAGE_TYPE && (queued.details as { messageId?: string })?.messageId === message.id));
 			const file = path.join(f.channel.channelDir, "to-main", `${message.id}.json`);
 			assert.ok(fs.existsSync(file));
 			assert.equal(f.inboxEntries().length, 0, "Queued messages are not recorded before the native queue consumes them");
-			assert.equal(f.session.getFollowUpMessages().length, 1, "Talk uses the native user-input queue display");
+			assert.deepEqual(f.session.getFollowUpMessages(), [], "Talk uses custom follow-ups, not the user-input queue display");
 			assert.equal(f.promptHooks.length, 1, "Busy follow-ups reuse the active run rather than starting prompt assembly again");
-			assert.equal(f.inputSources.at(-1), "extension");
+			assert.deepEqual(f.inputSources, ["interactive"]);
 			f.rescan(); f.rescan();
 			assert.equal(f.requests.length, 1);
 			if (mode === "reload") {

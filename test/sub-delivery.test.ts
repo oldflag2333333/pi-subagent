@@ -29,10 +29,10 @@ test("Sub retains failed messages, isolates protocol errors, and shuts down only
 		on: (event: string, handler: (...args: any[]) => unknown) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
 		registerTool: () => {}, registerMessageRenderer: () => {}, setSessionName: () => {},
 		getAllTools: () => [{ name: "read" }, { name: "talk" }], setActiveTools: () => {}, getActiveTools: () => ["read", "talk"],
-		sendUserMessage: (message: any) => {
+		sendMessage: (message: any) => {
 			if (failing) throw new Error("Submission failed");
 			received.push(message);
-			session.appendMessage({ role: "user", content: message, timestamp: Date.now() });
+			session.appendCustomMessageEntry(message.customType, message.content, message.display, message.details);
 		},
 	} as unknown as ExtensionAPI;
 	const ctx = { model: {}, sessionManager: session, isIdle: () => true, hasPendingMessages: () => false, hasUI: true,
@@ -68,7 +68,7 @@ test("Sub retains failed messages, isolates protocol errors, and shuts down only
 		talkToSub(channel.channelDir, manifest, "Recovered message");
 		rescan();
 		assert.equal(received.length, 3);
-		assert.ok(received[2].includes("Recovered message"));
+		assert.ok(received[2].content.includes("Recovered message"));
 		writeClose(channel.channelDir, manifest, "Done");
 		rescan(); rescan(); rescan();
 		assert.equal(aborts, 1);

@@ -11,7 +11,7 @@
 需要 **Node.js 22.19+**、**[Pi](https://pi.dev) 1.0.4+** 和 **Herdr**。启动助手时，Pi 必须运行在 Herdr 工作区中，并且能调用 `herdr` 命令。
 
 ```bash
-pi install npm:pi-subagent
+pi install npm:@oldflag2333333/pi-subagent
 ```
 
 安装后重启 Pi，或执行 `/reload`。Pi Subagent 使用 Pi 已有的模型服务凭据，请先确认 Pi 能正常对话。
@@ -19,7 +19,7 @@ pi install npm:pi-subagent
 后续更新：
 
 ```bash
-pi update npm:pi-subagent
+pi update npm:@oldflag2333333/pi-subagent
 ```
 
 更新后同样需要重启 Pi 或执行 `/reload`。
@@ -156,6 +156,8 @@ reviewer/
 清理前请关闭遗留的 Sub 标签页，命令只删除文件。角色配置和全局设置不受影响；以前散落在专用目录之外的 Sub 文件仍需手动删除。如果移动过 Main 文件或使用其他自定义会话目录，请先确保这些会话位于扫描范围内，再执行清理。
 
 ## 使用须知
+
+助手间消息使用自定义收件卡片。投递机制与 Pi 1.0.4/1.1.0 的已知限制见[消息说明](docs/messaging.md)。
 
 - **子助手依赖 Herdr。** 不支持无界面后台运行；最多同时打开四个子助手，子助手不能继续委派。
 - **角色配置不是沙箱。** 子助手以你的系统用户身份运行，配置“只读角色”不等于限制文件系统权限。

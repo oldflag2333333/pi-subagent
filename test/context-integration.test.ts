@@ -5,11 +5,10 @@ import * as path from "node:path";
 import { test } from "node:test";
 import { createAssistantMessageEventStream, getCurrentSystemMessage, type AssistantMessage, type TranscriptContext } from "@earendil-works/pi-ai";
 import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { createChannel, listTalkToMain, listTalkToSub, readManifest, talkToMain, talkToSub, writeSubClosed } from "../src/channel.js";
+import { createChannel, listTalkToMain, listTalkToSub, MESSAGE_TYPE, readManifest, talkToMain, talkToSub, writeSubClosed } from "../src/channel.js";
 import { MainRunManager } from "../src/run-manager.js";
 import { MainContextRuntime } from "../src/main-context.js";
 import { StartupProfileRuntime } from "../src/profiles/runtime.js";
-import { readTalkReceipt } from "../src/talk-message.js";
 
 function registerFixtureModel(pi: ExtensionAPI, requests: TranscriptContext[]) {
 	pi.registerProvider("subagent-context-fixture", {
@@ -157,19 +156,18 @@ test("Main acknowledges a real SDK delivery only after its session receipt, then
 		manager!.start(mainContext!);
 		assert.equal(listTalkToMain(channel.channelDir, manifest).length, 1);
 		assert.ok(fs.existsSync(channel.channelDir));
-		// User-input preflight awaits hooks before Pi becomes busy.
+		// Submission is asynchronous; only the saved custom message acknowledges it.
 		await new Promise<void>((resolve) => setImmediate(resolve));
 		await fixture.session.waitForIdle();
-		const received = fixture.session.sessionManager.getEntries().filter((entry) => entry.type === "message" && readTalkReceipt(entry.message) !== undefined);
+		const received = fixture.session.sessionManager.getEntries().filter((entry) => entry.type === "custom_message" && entry.customType === MESSAGE_TYPE);
 		assert.equal(received.length, 1);
-		assert.ok(received[0]?.type === "message");
-		assert.equal(readTalkReceipt(received[0].message)?.messageId, incoming.id);
+		assert.ok(received[0]?.type === "custom_message");
+		assert.equal((received[0].details as { messageId: string }).messageId, incoming.id);
 		await new Promise<void>((resolve) => setImmediate(resolve));
 		t.mock.timers.tick(20);
 		assert.equal(fs.existsSync(channel.channelDir), false);
 		t.mock.timers.tick(800);
 		assert.equal(requests.length, 1);
-		assert.equal(fixture.promptHooks.length, 1, "Idle talk must use normal prompt assembly");
 		assert.deepEqual(fixture.errors, []);
 	} finally {
 		manager?.shutdown();
@@ -201,14 +199,9 @@ test("Sub retains native context and adds only its own instructions and protocol
 		fixture = await contextSession(root, requests, subagent, undefined, ["read", "talk"]);
 		assert.ok(fixture.session.getActiveToolNames().includes("talk"));
 		const manifest = readManifest(channel.channelDir);
-		talkToSub(channel.channelDir, manifest, "Initial task from Main");
-		const initialDeadline = Date.now() + 2000;
-		while (listTalkToSub(channel.channelDir, manifest).length > 0 && Date.now() < initialDeadline) {
-			await new Promise((resolve) => setTimeout(resolve, 10));
-		}
-		assert.deepEqual(listTalkToSub(channel.channelDir, manifest), []);
-		await fixture.session.waitForIdle();
-		assert.equal(fixture.promptHooks.length, 1, "First input via talk must run before_agent_start");
+		// Herdr submits the initial task as normal input, before follow-up talk.
+		await fixture.session.prompt("Initial task from Main");
+		assert.equal(fixture.promptHooks.length, 1, "Initial task prepares the Sub profile and protocol");
 		const sections = assertNativeSections(requests[0]!);
 		assert.match(sections.subagent_profile!, /Sub-specific role/);
 		assert.match(sections.subagent_sub_protocol!, /isolated Sub Pi/);
@@ -220,17 +213,19 @@ test("Sub retains native context and adds only its own instructions and protocol
 		await fixture.session.reload();
 		const incoming = talkToSub(channel.channelDir, manifest, "Follow-up from Main");
 		assert.equal(listTalkToSub(channel.channelDir, manifest).length, 1);
-		const deadline = Date.now() + 2000;
+		const deadline = Date.now() + 7000;
 		while (listTalkToSub(channel.channelDir, manifest).length > 0 && Date.now() < deadline) {
 			await new Promise((resolve) => setTimeout(resolve, 10));
 		}
 		await fixture.session.waitForIdle();
 		assert.deepEqual(listTalkToSub(channel.channelDir, manifest), []);
-		const received = fixture.session.sessionManager.getEntries().filter((entry) => entry.type === "message" && readTalkReceipt(entry.message) !== undefined);
-		assert.equal(received.length, 2);
-		assert.ok(received[1]?.type === "message");
-		assert.equal(readTalkReceipt(received[1].message)?.messageId, incoming.id);
-		assert.equal(fixture.promptHooks.length, 2, "Idle talk after reload must reassemble instructions");
+		const received = fixture.session.sessionManager.getEntries().filter((entry) => entry.type === "custom_message" && entry.customType === MESSAGE_TYPE);
+		assert.equal(received.length, 1);
+		assert.ok(received[0]?.type === "custom_message");
+		assert.equal((received[0].details as { messageId: string }).messageId, incoming.id);
+		const hooksBeforePrompt = fixture.promptHooks.length;
+		await fixture.session.prompt("Continue after reload");
+		assert.equal(fixture.promptHooks.length, hooksBeforePrompt + 1);
 		const followUpSections = assertNativeSections(requests.at(-1)!);
 		assert.match(followUpSections.subagent_sub_protocol!, /isolated Sub Pi/);
 		assert.match(followUpSections.subagent_profile!, /Sub-specific role/);
