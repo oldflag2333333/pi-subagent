@@ -1,6 +1,6 @@
 {
   "name": "@oldflag2333333/pi-subagent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Reusable specialist profiles and independent sub-agents for Pi",
   "type": "module",
   "license": "MIT",
