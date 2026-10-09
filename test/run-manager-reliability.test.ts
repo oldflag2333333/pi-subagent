@@ -35,6 +35,7 @@ function fixture() {
 	const pi = {
 		on: () => () => {},
 		appendEntry: (type: string, data: unknown) => session.appendCustomEntry(type, data),
+		sendUserMessage: () => {},
 		sendMessage: (message: any) => {
 			messages.push(message);
 			if (idle) session.appendCustomMessageEntry(message.customType, message.content, message.display, message.details);

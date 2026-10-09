@@ -157,7 +157,7 @@ Close any orphaned Sub tabs before cleaning; the command only deletes files. Pro
 
 ## Things to know
 
-Message delivery uses custom inbox cards. See [messaging behavior and the known Pi 1.0.4/1.1.0 limitation](docs/messaging.md).
+Messages use custom inbox cards. An idle receiver also gets a short user-role wake prompt to preserve its profile instructions. See [messaging behavior and the Pi wake workaround](docs/messaging.md).
 
 - **Herdr is required for Subs.** There is no headless fallback. Up to four Subs can be open at once, and Subs cannot delegate further.
 - **Profiles are not a sandbox.** Subs run as your OS user. A read-only role is not a filesystem permission boundary.

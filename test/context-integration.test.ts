@@ -154,9 +154,9 @@ test("Main acknowledges a real SDK delivery only after its session receipt, then
 		const incoming = talkToMain(channel.channelDir, manifest, "Final review");
 		writeSubClosed(channel.channelDir, manifest, "Manual close");
 		manager!.start(mainContext!);
-		assert.equal(listTalkToMain(channel.channelDir, manifest).length, 1);
-		assert.ok(fs.existsSync(channel.channelDir));
-		// Submission is asynchronous; only the saved custom message acknowledges it.
+		assert.equal(listTalkToMain(channel.channelDir, manifest).length, 0);
+		assert.ok(fs.existsSync(channel.channelDir), "The next scan finishes draining the closed channel");
+		// Idle cards are recorded synchronously before the separate user wake starts.
 		await new Promise<void>((resolve) => setImmediate(resolve));
 		await fixture.session.waitForIdle();
 		const received = fixture.session.sessionManager.getEntries().filter((entry) => entry.type === "custom_message" && entry.customType === MESSAGE_TYPE);
@@ -223,6 +223,10 @@ test("Sub retains native context and adds only its own instructions and protocol
 		assert.equal(received.length, 1);
 		assert.ok(received[0]?.type === "custom_message");
 		assert.equal((received[0].details as { messageId: string }).messageId, incoming.id);
+		assert.equal(fixture.promptHooks.length, 2, "Idle follow-up prepares the Sub profile again after reload");
+		const wakeSections = assertNativeSections(requests[1]!);
+		assert.match(wakeSections.subagent_sub_protocol!, /isolated Sub Pi/);
+		assert.match(wakeSections.subagent_profile!, /Sub-specific role/);
 		const hooksBeforePrompt = fixture.promptHooks.length;
 		await fixture.session.prompt("Continue after reload");
 		assert.equal(fixture.promptHooks.length, hooksBeforePrompt + 1);

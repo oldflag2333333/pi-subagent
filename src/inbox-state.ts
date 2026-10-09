@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { MESSAGE_TYPE, type TalkDirection } from "./channel.js";
 import type { DelegateManifest, TalkMessage } from "./types.js";
 import { readTalkReceipt } from "./talk-message.js";
+import { parentWakeFor } from "./parent-wake.js";
 
 type ReadonlySessionManager = ExtensionContext["sessionManager"];
 interface PendingTalk {
@@ -68,6 +69,7 @@ export function bindInboxEvents(pi: ExtensionAPI, getContext: () => ExtensionCon
 	pi.on("agent_start", () => {
 		const ctx = getContext();
 		if (!ctx) return;
+		parentWakeFor(pi, ctx).agentStarted();
 		const value = state(ctx);
 		value.runSerial++;
 		value.aborted = ctx.signal?.aborted === true;
@@ -75,6 +77,10 @@ export function bindInboxEvents(pi: ExtensionAPI, getContext: () => ExtensionCon
 		const runSerial = value.runSerial;
 		ctx.signal?.addEventListener("abort", () => { if (value.runSerial === runSerial) value.aborted = true; }, { once: true });
 		wakePending();
+	});
+	pi.on("session_shutdown", (event, ctx) => {
+		// Use the event context: manager shutdown may already have cleared its active context.
+		parentWakeFor(pi, ctx).sessionShutdown(event.reason);
 	});
 	pi.on("agent_end", (event) => {
 		const ctx = getContext();

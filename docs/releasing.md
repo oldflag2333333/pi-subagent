@@ -1,61 +1,72 @@
 # Releasing Pi Subagent
 
-Maintainer guide. For installation and usage, see the [README](../README.md).
+English | [简体中文](releasing.zh-CN.md)
 
-## CI and automatic npm releases
+## What CI does
 
-GitHub Actions runs type checks, tests, package metadata validation, and a packaging dry run for pull requests and pushes to `main` and `dev`, on Node.js 22.19 and 24.
+`.github/workflows/release.yml` runs on PRs and pushes to `main`/`dev`, and through **Actions → CI and Release → Run workflow**.
 
-A **version increase in `package.json` pushed to `main`** releases automatically after both check jobs pass:
+- Type checks and tests on Node **22.19.0** and **24**.
+- Package/lockfile validation and an npm packaging dry run.
+- The Node 24 job uploads a `.tgz` as `npm-package-<commit SHA>` (retained for 14 days).
+- Only a **version increase pushed to `main` in `oldflag2333333/pi-subagent`** triggers publication, after both check jobs pass. Ordinary pushes, PRs, manual CI runs, and tag pushes do not publish.
 
-1. Validate the matching version in `package-lock.json`.
-2. Reserve `v<version>` at the exact checked commit.
-3. Publish the npm tarball through OIDC trusted publishing, with provenance.
-4. Create the GitHub Release with automatically generated release notes.
+Publishing uses npm OIDC with provenance, reserves `v<version>` at the checked commit, and creates a GitHub Release. Stable versions use `latest`; prereleases use `next`.
 
-Ordinary code/dependency changes with no version increase do not publish. Neither PRs, `dev` pushes, tag pushes, nor installing the workflow alone publish a package. Stable versions use npm's `latest` tag; prereleases such as `0.2.0-rc.1` use `next` and GitHub's prerelease flag.
+## First npm release: 0.1.0
 
-### One-time npm setup
+**npm requires the package to exist before a trusted publisher can be configured.** The first publish therefore needs your npm login, not OIDC. See [npm's prerequisites](https://docs.npmjs.com/cli/v11/commands/npm-trust/#prerequisites).
 
-For a new package, publish the initial version once after committing and checking the source:
+The npm package is **@oldflag2333333/pi-subagent**.
 
-```bash
-npm ci
-npm run check
-npm login
-npm publish --access public --ignore-scripts
-```
+1. Enable 2FA on your npm account.
+2. Push the intended release commit to `main`. Wait for the entire **CI and Release** run to succeed.
+3. Download that run's `npm-package-<commit SHA>` artifact and extract it. Use a trusted `main` run, not a PR artifact.
+4. In the extracted directory, run:
 
-This bootstrap publish creates the package so its trusted publisher can be configured. Subsequent releases use the workflow below, not local `npm publish`.
+   ```bash
+   npx --yes npm@11.21.0 login --registry=https://registry.npmjs.org
+   npx --yes npm@11.21.0 publish ./oldflag2333333-pi-subagent-0.1.0.tgz --access public --ignore-scripts --registry=https://registry.npmjs.org
+   ```
 
-In the npm settings for **@oldflag2333333/pi-subagent**, add a **GitHub Actions Trusted Publisher**:
+   Complete the browser/2FA prompts yourself. Do not send credentials or OTPs to an agent. The tarball is the exact package produced by CI; no need to repack it locally. This initial interactive publish does not have CI provenance and does not create a GitHub Release.
 
-| Setting | Value |
+5. Verify:
+
+   ```bash
+   npm view @oldflag2333333/pi-subagent version --registry=https://registry.npmjs.org
+   ```
+
+## Configure automatic publishing on npm
+
+Open **npmjs.com → @oldflag2333333/pi-subagent → Settings → Trusted publishing → Add trusted publisher → GitHub Actions**:
+
+| Field | Value |
 | --- | --- |
 | Organization or user | `oldflag2333333` |
 | Repository | `pi-subagent` |
-| Workflow filename | `release.yml` (filename only, not a path) |
-| Environment | Leave blank; this workflow does not use a GitHub Environment |
-| Allowed actions | Allow direct `npm publish` |
+| Workflow filename | `release.yml` — filename only |
+| Environment name | Leave empty |
+| Allowed actions | Enable direct `npm publish`, not just staged publishing |
 
-No `NPM_TOKEN` secret is needed. GitHub supplies its built-in `GITHUB_TOKEN` for tags/releases; only the release job has `contents: write` and `id-token: write`. Publishing runs on a GitHub-hosted runner with Node 24 and a pinned npm 11 CLI. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) for package-side setup.
+No `NPM_TOKEN` or other npm secret is needed in GitHub. The workflow requests `id-token: write` and uses GitHub's built-in token for tags/releases.
 
-Commit the workflow to GitHub and enable Actions before the first version bump. Keep `package.json`'s `repository.url` aligned with this repository; npm provenance and the release script verify that identity.
+A new trust configuration must complete a successful OIDC publish **within 2 days**, or it expires. Configure it when you are ready for the next version, or recreate it if it expires. After verifying OIDC publishing, npm recommends **Publishing access → Require two-factor authentication and disallow tokens**.
 
-### Releasing
+Source: [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
 
-On your feature/release branch:
+## Subsequent releases
+
+With a clean working tree:
 
 ```bash
-npm version minor --no-git-tag-version
-# Or: npm version patch --no-git-tag-version
+npm version patch --no-git-tag-version
+# From 0.1.0, this produces 0.1.1.
 git add package.json package-lock.json
-git commit -m "chore: release v0.2.0"
+git commit -m "chore: release v0.1.1"
+git push origin main
 ```
 
-Merge that change into `main` (or push it directly if your branch policy allows). The workflow handles the tag, npm publication, and GitHub Release; do not run `npm publish` yourself.
+Use a PR instead if required by branch policy. Once the version bump reaches `main`, CI publishes npm and creates the tag and GitHub Release automatically. Do not publish locally again or pre-create the tag.
 
-If publishing fails, correct the external setup and **re-run the original failed workflow** on its original commit. An identical already-published artifact is not republished, so a failed GitHub Release step can be completed safely. An existing tag pointing elsewhere, an npm version with different contents, or a version that would move a dist-tag backwards causes an error instead of an overwrite. A failed npm publish may leave its reserved Git tag, but no GitHub Release is announced until publication succeeds. Publish one version at a time.
-
-GitHub Releases created by `GITHUB_TOKEN` do not trigger a second release workflow, so npm publication and Release creation deliberately run in the same job.
-
+If publication fails, fix the external configuration and **re-run the original failed workflow**. An identical already-published artifact is not republished; conflicting artifacts or tags fail rather than overwrite existing releases. Never try to reuse an npm version for different contents. Publish one version at a time.

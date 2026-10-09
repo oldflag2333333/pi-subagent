@@ -39,7 +39,7 @@ test("Sub aborts only the targeted turn and stays open", async () => {
 		abort: () => { aborts++; idle = true; },
 		shutdown: () => { shutdowns++; },
 		ui: { setTitle: () => {}, setStatus: () => {} },
-		sessionManager: { getSessionFile: () => undefined },
+		sessionManager: { getSessionFile: () => undefined, getSessionId: () => "sub-session" },
 	} as unknown as ExtensionContext;
 	try {
 		// Register against the Sub\'s configured channel environment.

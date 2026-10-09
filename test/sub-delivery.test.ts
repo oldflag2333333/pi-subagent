@@ -29,6 +29,7 @@ test("Sub retains failed messages, isolates protocol errors, and shuts down only
 		on: (event: string, handler: (...args: any[]) => unknown) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
 		registerTool: () => {}, registerMessageRenderer: () => {}, setSessionName: () => {},
 		getAllTools: () => [{ name: "read" }, { name: "talk" }], setActiveTools: () => {}, getActiveTools: () => ["read", "talk"],
+		sendUserMessage: () => {},
 		sendMessage: (message: any) => {
 			if (failing) throw new Error("Submission failed");
 			received.push(message);

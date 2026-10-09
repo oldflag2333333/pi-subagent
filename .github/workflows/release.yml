@@ -5,6 +5,8 @@ on:
     branches: [main, dev]
   push:
     branches: [main, dev]
+  # Manual runs validate and package only; publishing still requires a version bump.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -26,10 +28,24 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      - run: npm ci
+      - run: npm install --global npm@11.21.0
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - run: node --import tsx .github/scripts/release.ts validate
       - run: npm pack --dry-run --ignore-scripts
+      - name: Pack the checked source for the first manual npm publish
+        if: matrix.node == '24'
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-package"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/npm-package"
+      - name: Upload npm package
+        if: matrix.node == '24'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-package-${{ github.sha }}
+          path: ${{ runner.temp }}/npm-package/*.tgz
+          if-no-files-found: error
+          retention-days: 14
 
   plan:
     name: Detect version bump

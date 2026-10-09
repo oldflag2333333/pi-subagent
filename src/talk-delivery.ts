@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { MESSAGE_TYPE, removeTalk, type TalkDirection } from "./channel.js";
 import type { DelegateManifest, TalkMessage } from "./types.js";
 import { readTalkReceipt } from "./talk-message.js";
+import { parentWakeFor } from "./parent-wake.js";
 import { canUseNativeQueue, forgetTalk, markTalkQueued, rememberTalk } from "./inbox-state.js";
 
 function hasReceipt(ctx: ExtensionContext, direction: TalkDirection, runId: string, messageId: string): boolean {
@@ -26,6 +27,7 @@ export function deliverTalk(
 	content: string,
 ): "acknowledged" | "waiting" | "sent" {
 	if (hasReceipt(ctx, direction, manifest.runId, message.id)) {
+		if (!parentWakeFor(pi, ctx).retryFailedWake()) return "waiting";
 		forgetTalk(ctx, direction, manifest.runId, message.id);
 		removeTalk(channelDir, direction, message.id);
 		return "acknowledged";
@@ -37,9 +39,9 @@ export function deliverTalk(
 	try {
 		// Pi owns waiting behind current work, not Pi Subagent. In-flight IDs prevent
 		// repeated file notifications from submitting the same follow-up twice.
-		// Custom messages preserve inbox rendering and never execute peer text as
-		// commands. Pi owns run preparation; do not emulate input hooks here.
-		pi.sendMessage({
+		// Keep peer content in the custom inbox card. Idle runs use a separate,
+		// fixed user wake so Pi assembles the profile sections through its input pipeline.
+		parentWakeFor(pi, ctx).sendMessage({
 			customType: MESSAGE_TYPE,
 			content,
 			display: true,

@@ -7,6 +7,7 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import subagent from "../src/index.js";
 import { createChannel, MESSAGE_TYPE, readManifest, talkToMain, talkToSub } from "../src/channel.js";
 import { deliverTalk } from "../src/talk-delivery.js";
+import { PARENT_WAKE_TEXT } from "../src/parent-wake.js";
 
 const theme = {
 	fg: (_color: string, text: string) => text,
@@ -32,12 +33,13 @@ for (const direction of ["to-main", "to-sub"] as const) {
 			} else delete process.env.PI_SUBAGENT_ROLE;
 			const renderers = new Map<string, MessageRenderer>();
 			const submitted: Parameters<ExtensionAPI["sendMessage"]>[0][] = [];
+			const wakes: string[] = [];
 			const pi = {
 				on: () => () => {}, registerTool: () => {}, registerCommand: () => {}, registerFlag: () => {},
 				registerMessageRenderer: (name: string, renderer: MessageRenderer) => renderers.set(name, renderer),
-				sendUserMessage: () => { throw new Error("Talk must not inject a user wake message"); },
+				sendUserMessage: (text: string) => { wakes.push(text); },
 				sendMessage: (message: Parameters<ExtensionAPI["sendMessage"]>[0], options: unknown) => {
-					assert.deepEqual(options, { deliverAs: "followUp", triggerTurn: true });
+					assert.deepEqual(options, { triggerTurn: false });
 					submitted.push(message);
 				},
 			} as unknown as ExtensionAPI;
@@ -49,6 +51,8 @@ for (const direction of ["to-main", "to-sub"] as const) {
 			const protocol = `[Pi Subagent internal envelope]\n${body}\nUse talk with private-run-id`;
 			assert.equal(deliverTalk(pi, ctx, channel.channelDir, manifest, direction, incoming, protocol), "sent");
 			assert.equal(submitted.length, 1);
+			assert.deepEqual(wakes, [PARENT_WAKE_TEXT]);
+			assert.ok(!wakes[0]!.includes(body), "Wake must not duplicate peer content");
 			const delivered = submitted[0]!;
 			assert.equal(delivered.customType, MESSAGE_TYPE);
 			assert.equal(delivered.display, true);

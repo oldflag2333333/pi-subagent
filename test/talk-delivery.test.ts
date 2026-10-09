@@ -32,7 +32,7 @@ function fixture() {
 	let queued = false;
 	const warnings: string[] = [];
 	const sent: any[] = [];
-	const pi = { sendMessage: (message: any) => { sent.push(message); } } as unknown as ExtensionAPI;
+	const pi = { sendUserMessage: () => {}, sendMessage: (message: any) => { sent.push(message); } } as unknown as ExtensionAPI;
 	const ctx = { model: {}, signal: new AbortController().signal, sessionManager: session, isIdle: () => idle, hasPendingMessages: () => queued, hasUI: true,
 		ui: { notify: (message: string) => warnings.push(message) },
 	} as unknown as ExtensionContext;
@@ -60,6 +60,24 @@ test("keeps failed synchronous deliveries retryable and supports synchronous rec
 	assert.equal(listTalkToMain(f.channel.channelDir, f.manifest).length, 1);
 	f.pi.sendMessage = (message) => { f.session.appendCustomMessageEntry(message.customType, message.content, message.display, message.details); };
 	assert.equal(f.send(), "sent");
+	assert.deepEqual(listTalkToMain(f.channel.channelDir, f.manifest), []);
+});
+
+test("a saved custom receipt does not lose a failed wake, including across reload", () => {
+	const f = fixture();
+	let appends = 0;
+	let wakes = 0;
+	f.pi.sendMessage = (message) => {
+		appends++;
+		f.session.appendCustomMessageEntry(message.customType, message.content, message.display, message.details);
+	};
+	f.pi.sendUserMessage = () => { throw new Error("Wake rejected"); };
+	assert.throws(f.send, /Wake rejected/);
+	assert.equal(listTalkToMain(f.channel.channelDir, f.manifest).length, 1);
+	const replacement = { ...f.pi, sendUserMessage: () => { wakes++; } } as ExtensionAPI;
+	assert.equal(deliverTalk(replacement, f.ctx, f.channel.channelDir, f.manifest, "to-main", f.message, "Delivery content"), "acknowledged");
+	assert.equal(appends, 1);
+	assert.equal(wakes, 1);
 	assert.deepEqual(listTalkToMain(f.channel.channelDir, f.manifest), []);
 });
 
