@@ -44,6 +44,62 @@ afterEach(() => {
 	fs.rmSync(root, { recursive: true, force: true });
 });
 
+test("resolves extension allowlists without installing packages or executing local code", () => {
+	const dir = writeDirectoryProfile(globalProfilesDir(), "reviewer", {
+		version: 1, name: "reviewer", tools: ["read"],
+		extensions: [" npm:pi-model-calibration ", "npm:pi-model-calibration", "./hooks.ts", "./package", "builtin:codemode", "git:github.com/example/hooks@v1", "https://github.com/example/hooks"],
+	});
+	const hook = path.join(dir, "hooks.ts");
+	fs.writeFileSync(hook, "throw new Error('must not execute in Main');");
+	fs.mkdirSync(path.join(dir, "package"));
+	const resolved = resolveProfile("reviewer", cwd, false);
+	assert.deepEqual(resolved.resolvedExtensions, [
+		"npm:pi-model-calibration", hook, path.join(dir, "package"), "builtin:codemode",
+		"git:github.com/example/hooks@v1", "https://github.com/example/hooks",
+	]);
+	assert.equal(fs.existsSync(path.join(process.env.PI_CODING_AGENT_DIR!, "npm")), false);
+});
+
+test("normalizes and deduplicates absolute, home, and legacy relative extension paths", () => {
+	const extension = path.join(globalProfilesDir(), "hooks.ts");
+	fs.mkdirSync(path.dirname(extension), { recursive: true });
+	fs.writeFileSync(extension, "export default () => {};");
+	const homeReference = `~/${path.relative(os.homedir(), extension)}`;
+	writeJson(path.join(globalProfilesDir(), "reviewer.json"), {
+		version: 1, name: "reviewer", tools: ["read"], extensions: [extension, "./hooks.ts", homeReference],
+	});
+	assert.deepEqual(resolveProfile("reviewer", cwd, false).resolvedExtensions, [extension]);
+});
+
+test("extension allowlists respect project trust and whole-profile overrides", () => {
+	writeJson(path.join(globalProfilesDir(), "reviewer.json"), {
+		version: 1, name: "reviewer", tools: ["read"], extensions: ["npm:pi-model-calibration"],
+	});
+	writeJson(path.join(projectProfilesDir(cwd), "reviewer.json"), {
+		version: 1, name: "reviewer", tools: ["read"], extensions: [],
+	});
+	assert.deepEqual(resolveProfile("reviewer", cwd, false).resolvedExtensions, ["npm:pi-model-calibration"]);
+	assert.deepEqual(resolveProfile("reviewer", cwd, true).resolvedExtensions, []);
+	writeJson(path.join(projectProfilesDir(cwd), "reviewer.json"), { version: 1, name: "reviewer", tools: ["read"] });
+	assert.deepEqual(resolveProfile("reviewer", cwd, true).resolvedExtensions, []);
+});
+
+test("reports missing local extensions instead of silently skipping them", () => {
+	writeJson(path.join(globalProfilesDir(), "reviewer.json"), {
+		version: 1, name: "reviewer", tools: ["read"], extensions: ["./missing.ts"],
+	});
+	assert.throws(() => resolveProfile("reviewer", cwd, false), /reviewer.*extension is missing.*missing\.ts/);
+});
+
+for (const extensions of ["npm:pi-model-calibration", [42], [""], [" \t"], Array(129).fill("npm:hooks"), ["a".repeat(4097)]]) {
+	test(`rejects invalid extension allowlist ${JSON.stringify(extensions).slice(0, 60)}`, () => {
+		writeJson(path.join(globalProfilesDir(), "reviewer.json"), { version: 1, name: "reviewer", tools: ["read"], extensions });
+		const catalog = loadProfiles(cwd, false);
+		assert.equal(catalog.profiles.has("reviewer"), false);
+		assert.match(catalog.diagnostics[0]!.message, /extensions must be a string array/);
+	});
+}
+
 test("validates manual invocation while keeping operator discovery separate from delegation", () => {
 	writeJson(path.join(globalProfilesDir(), "review.json"), {
 		version: 1, name: "review", invocation: "manual", sessionPersistence: "persistent", tools: ["read"],

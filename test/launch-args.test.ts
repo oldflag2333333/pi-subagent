@@ -25,6 +25,14 @@ test("keeps built-in extension specs intact and deduplicates explicit loads", ()
 	assert.deepEqual(args.slice(0, 8), ["-e", "builtin:codemode", "-e", "builtin:tool-search", "-e", "builtin:mcp", "--tools", "read,codemode,tool_search,talk,mcp__*,list_mcp_resources,list_mcp_resource_templates,read_mcp_resource"]);
 });
 
+test("passes event-only package allowlists as explicit extensions without changing selected tools", () => {
+	const args = subCapabilityArgs({ ...profile, resolvedExtensions: ["npm:pi-model-calibration", "npm:pi-model-calibration", "/tmp/local hooks.ts"] }, "/tmp/subagent.ts");
+	const extensions = args.flatMap((arg, index) => arg === "-e" ? [args[index + 1]] : []);
+	assert.deepEqual(extensions, ["npm:pi-model-calibration", "/tmp/local hooks.ts", "builtin:codemode", "builtin:tool-search", "builtin:mcp"]);
+	const baseline = subCapabilityArgs(profile, "/tmp/subagent.ts");
+	assert.equal(args[args.indexOf("--tools") + 1], baseline[baseline.indexOf("--tools") + 1]);
+});
+
 test("builds one Sub capability argument set from the resolved profile", () => {
 	assert.deepEqual(subCapabilityArgs(profile, "/tmp/subagent.ts"), [
 		"-e", "/tmp/web-extension.ts",

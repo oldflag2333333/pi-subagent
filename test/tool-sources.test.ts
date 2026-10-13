@@ -34,6 +34,25 @@ test("derives and deduplicates extension entry paths from selected tool provenan
 	}
 });
 
+test("preserves event-only allowlisted extensions and merges tool dependencies without duplicates", () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-allowlist-"));
+	try {
+		const web = path.join(root, "web.ts");
+		fs.writeFileSync(web, "export default () => {}\n");
+		const selected = { ...profile(["read", "web_search"]), resolvedExtensions: ["npm:pi-model-calibration", web] };
+		const sources = [
+			{ name: "read", sourceInfo: { path: "builtin:read", source: "builtin" } },
+			{ name: "web_search", sourceInfo: { path: web, source: "npm:pi-web-access" } },
+		];
+		const resolved = resolveToolExtensions(selected, sources);
+		assert.deepEqual(resolved.resolvedExtensions, ["npm:pi-model-calibration", web]);
+		assert.deepEqual(resolveToolExtensions(resolved, sources), resolved);
+		assert.deepEqual(resolveToolExtensions({ ...selected, tools: ["read"] }, sources).resolvedExtensions, selected.resolvedExtensions);
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
 test("loads built-in extensions explicitly while leaving native tools alone", () => {
 	const resolved = resolveToolExtensions(profile(["read", "bash", "codemode", "tool_search"]), [
 		{ name: "read", sourceInfo: { path: "builtin:read", source: "builtin" } },

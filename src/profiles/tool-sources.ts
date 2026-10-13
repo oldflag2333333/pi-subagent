@@ -16,7 +16,8 @@ interface ToolSource {
 
 export function resolveToolExtensions(profile: ResolvedProfile, tools: ToolSource[]): ResolvedProfile {
 	const available = new Map(tools.map((tool) => [tool.name, tool]));
-	const extensionPaths = new Set<string>();
+	// Keep explicitly allowlisted event-only extensions alongside tool providers.
+	const extensionPaths = new Set<string>(profile.resolvedExtensions);
 	for (const name of profile.tools) {
 		// Native MCP connects asynchronously; do not require its tools in Main yet.
 		if (isMcpTool(name)) continue;

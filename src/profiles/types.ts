@@ -13,6 +13,8 @@ export interface ProfileDefinition {
 	invocation?: ProfileInvocation;
 	tools: string[];
 	skills?: string[];
+	/** Additional extensions explicitly loaded in Subs, not inherited from Main. */
+	extensions?: string[];
 	instructions?: string;
 }
 

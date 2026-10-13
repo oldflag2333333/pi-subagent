@@ -27,7 +27,7 @@ const spec: SubLaunchSpec = {
 		source: "global",
 		sourcePath: "/tmp/research.json",
 		resolvedSkills: [],
-		resolvedExtensions: ["/tmp/web.ts"],
+		resolvedExtensions: ["/tmp/web.ts", "npm:pi-model-calibration"],
 	},
 };
 
@@ -219,6 +219,8 @@ test("starts an idle Pi before submitting work through herdr agent prompt", asyn
 		const metadata = calls.find((call) => call.args[0] === "pane" && call.args[1] === "report-metadata");
 		assert.equal(start.args.includes(spec.task), false);
 		assert.equal(start.args.includes(integration), true);
+		assert.equal(start.args.includes("--no-extensions"), true);
+		assert.ok(start.args.some((arg, index) => arg === "-e" && start.args[index + 1] === "npm:pi-model-calibration"));
 		assert.equal(start.args.includes("--no-session"), false);
 		assert.deepEqual(start.args.slice(start.args.indexOf("--session-dir"), start.args.indexOf("--session-dir") + 2), ["--session-dir", subSessionDir(spec.mainSessionId)]);
 		assert.deepEqual(start.args.slice(start.args.indexOf("--session"), start.args.indexOf("--session") + 2), ["--session", "session-to-resume"]);

@@ -117,8 +117,27 @@ Add these fields to `config.json` as needed:
 | `"model": "provider/model-id"` | Choose a model available in your Pi configuration. |
 | `"thinkingLevel": "high"` | Request a thinking level supported by the selected model. |
 | `"skills": ["skill-name", "./path/to/SKILL.md"]` | Include installed skills or paths relative to the profile. |
+| `"extensions": ["npm:pi-model-calibration", "./hooks.ts"]` | Explicitly load extra extensions in Subs, including prompt/event plugins that provide no tools. |
 
 For a persistent specialist started with `/sub:reviewer`, invoking the command again from the same saved Main session resumes it after closure. A different Main session gets its own specialist. Manual-only profiles are not available for Pi to delegate on its own.
+
+### Sub extension allowlist
+
+Add this to the profile's `config.json`, for example:
+
+```json
+"extensions": ["npm:pi-model-calibration"]
+```
+
+Entries accept Pi's npm, `git:`, HTTP(S) repository URLs, `builtin:` identifiers, and local extension files or package directories. Relative local paths resolve from the **configuration file's directory**; absolute paths and `~/` work too. Missing local paths fail startup; repeated entries load once. Package specs are resolved by Pi in the Sub and may download or install packages, never while Main reads the profile.
+
+`npm:` / `git:` entries use Pi's temporary package cache; a globally installed package may not be present there. For offline use, list the installed entry file directly, for example `"extensions": ["~/.pi/agent/npm/node_modules/pi-model-calibration/index.ts"]`, to avoid another download.
+
+Omitting the field or using `[]` loads no extra plugins. Subs still use `--no-extensions`: only communication/Herdr integration, normal MCP support, selected tools' extension dependencies, and this allowlist load explicitly. Other Main plugins are not inherited. Project profiles still require project trust; same-named overrides replace rather than merge allowlists.
+
+This field controls **Sub launches only**; it does not dynamically load extensions in the current process started with `pi --profile`. Use Pi's `-e` or normal extension configuration for that case. Loading an extension does not automatically add its tools to the profile's `tools`; custom non-MCP tools must still be available in Main.
+
+Extensions can execute code, read context, and change prompts. **This is not a sandbox**; list only trusted plugins. After editing, reload Main and close/reopen affected Subs. For `model-calibration`, its rules must also match the Sub's selected model before calibration text is injected.
 
 ### Profile-specific skills
 
@@ -165,7 +184,7 @@ Messages use custom inbox cards and Pi’s native run preparation, without extra
 - **Subs have separate conversations.** They receive their task, profile, and normal project context—not Main's chat history. Include the details they need in the task.
 - **Reloading Main does not close Subs.** Close tabs you no longer need. Hard crashes may require manual cleanup.
 
-If a profile is missing or fails to start, run `/profiles` first. Check its directory/name match, project trust, and any referenced tools or skills. If Herdr is unavailable, confirm Pi is running inside a Herdr workspace.
+If a profile is missing or fails to start, run `/profiles` first. Check its directory/name match, project trust, and any referenced tools, skills, or extensions. If Herdr is unavailable, confirm Pi is running inside a Herdr workspace.
 
 To hide or show Pi Subagent Subs in Herdr's Agents panel, see the optional [Herdr companion plugin](herdr-plugin/README.md).
 

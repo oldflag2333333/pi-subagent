@@ -23,6 +23,7 @@ import { registerMainTools } from "../src/tools/main.js";
 import { StartupProfileRuntime } from "../src/profiles/runtime.js";
 import { subCapabilityArgs } from "../src/profiles/launch-args.js";
 import { resolveToolExtensions } from "../src/profiles/tool-sources.js";
+import { resolveProfile } from "../src/profiles/loader.js";
 import type { ResolvedProfile } from "../src/profiles/types.js";
 
 const builtinFactories = [
@@ -110,6 +111,52 @@ test("Sub launch loads its selected extensions plus native MCP support", async (
 	} finally {
 		sub?.dispose();
 		main?.dispose();
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("event-only profile extensions run in Sub while ambient extensions stay disabled", async () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-pi-allowlist-"));
+	const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+	const agentDir = path.join(root, "agent");
+	process.env.PI_CODING_AGENT_DIR = agentDir;
+	const profileDir = path.join(agentDir, "subagent", "profiles", "reviewer");
+	fs.mkdirSync(profileDir, { recursive: true });
+	const packageDir = path.join(profileDir, "calibration");
+	fs.mkdirSync(packageDir);
+	fs.writeFileSync(path.join(packageDir, "package.json"), JSON.stringify({ type: "module", pi: { extensions: ["./index.mjs"] } }));
+	fs.writeFileSync(path.join(packageDir, "index.mjs"), `export default function (pi) {
+		pi.on("before_agent_start", (event) => { event.systemPromptOptions.appendSystemPrompt += "ALLOWLIST_CALIBRATION"; });
+	}`);
+	const ambient = path.join(agentDir, "extensions", "ambient.mjs");
+	fs.mkdirSync(path.dirname(ambient), { recursive: true });
+	fs.writeFileSync(ambient, `export default function (pi) {
+		pi.on("before_agent_start", (event) => { event.systemPromptOptions.appendSystemPrompt += "UNSELECTED_AMBIENT"; });
+	}`);
+	const config = path.join(profileDir, "config.json");
+	let main: Awaited<ReturnType<typeof openSession>> | undefined;
+	let sub: typeof main;
+	try {
+		main = await openSession(root, ["builtin:codemode", "builtin:tool-search", "builtin:mcp"]);
+		for (const extensions of [[], ["./calibration"]]) {
+			fs.writeFileSync(config, JSON.stringify({ version: 1, name: "reviewer", tools: ["read"], extensions }));
+			const resolved = resolveToolExtensions(resolveProfile("reviewer", root, false), main.getAllTools());
+			const args = subCapabilityArgs(resolved, "/tmp/subagent.ts");
+			const explicit = args.flatMap((arg, index) => arg === "-e" ? [args[index + 1]!] : []);
+			sub = await openSession(root, explicit, undefined, undefined, args[args.indexOf("--tools") + 1]!.split(","));
+			const result = await sub.extensionRunner!.emitBeforeAgentStart({ messageType: "user", prompt: "Review" }, { cwd: root });
+			assert.equal(result.systemPromptOptions.appendSystemPrompt.includes("ALLOWLIST_CALIBRATION"), extensions.length > 0);
+			assert.equal(result.systemPromptOptions.appendSystemPrompt.includes("UNSELECTED_AMBIENT"), false);
+			assert.deepEqual(new Set(sub.getAllTools().map((tool) => tool.name)), new Set(["read", "codemode", "tool_search"]));
+			await sub.extensionRunner!.emit({ type: "session_shutdown", reason: "quit" });
+			sub.dispose();
+			sub = undefined;
+		}
+	} finally {
+		sub?.dispose();
+		main?.dispose();
+		if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+		else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
 		fs.rmSync(root, { recursive: true, force: true });
 	}
 });

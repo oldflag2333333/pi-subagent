@@ -26,6 +26,7 @@ const ALLOWED_KEYS = new Set([
 	"invocation",
 	"tools",
 	"skills",
+	"extensions",
 	"instructions",
 ]);
 
@@ -48,6 +49,7 @@ function parseProfile(value: unknown, expectedName: string): ProfileDefinition {
 	}
 	if (!stringArray(value.tools, 128) || value.tools.length === 0) throw new Error("tools must be a non-empty string array with at most 128 entries");
 	if (value.skills !== undefined && !stringArray(value.skills, 128)) throw new Error("skills must be a string array with at most 128 entries");
+	if (value.extensions !== undefined && !stringArray(value.extensions, 128)) throw new Error("extensions must be a string array with at most 128 entries");
 	if (value.sessionPersistence !== undefined && value.sessionPersistence !== "ephemeral" && value.sessionPersistence !== "persistent") {
 		throw new Error("sessionPersistence must be 'ephemeral' or 'persistent'");
 	}
@@ -76,6 +78,7 @@ function parseProfile(value: unknown, expectedName: string): ProfileDefinition {
 			? { sessionPersistence: value.sessionPersistence }
 			: {}),
 		...(Array.isArray(value.skills) ? { skills: [...new Set(value.skills as string[])] } : {}),
+		...(Array.isArray(value.extensions) ? { extensions: [...new Set((value.extensions as string[]).map((entry) => entry.trim()))] } : {}),
 		...(typeof value.instructions === "string" ? { instructions: value.instructions } : {}),
 	};
 }
@@ -294,6 +297,23 @@ function discoverProfileSkills(profile: LoadedProfile): string[] {
 	return skills;
 }
 
+function resolveExtension(reference: string, profile: LoadedProfile): string {
+	// Pi resolves package and built-in specs in the Sub process. Do not install
+	// packages or execute extension code while reading profiles in Main.
+	if (/^(?:npm:|git:|https?:\/\/|builtin:)/.test(reference)) return reference;
+	const resolved = path.resolve(path.dirname(profile.sourcePath), expandHome(reference));
+	let stat: fs.Stats;
+	try {
+		stat = fs.statSync(resolved);
+	} catch {
+		throw new Error(`Profile '${profile.name}' extension is missing or unreadable: ${resolved}.`);
+	}
+	if (!stat.isFile() && !stat.isDirectory()) {
+		throw new Error(`Profile '${profile.name}' has an unsupported extension path: ${resolved}.`);
+	}
+	return resolved;
+}
+
 export function resolveProfile(name: string, cwd: string, includeProject: boolean, options: { agentOnly?: boolean } = {}): ResolvedProfile {
 	const catalog = loadProfiles(cwd, includeProject);
 	const invalid = catalog.diagnostics.map((item) => `${item.path}: ${item.message}`);
@@ -320,6 +340,6 @@ export function resolveProfile(name: string, cwd: string, includeProject: boolea
 	return {
 		...profile,
 		resolvedSkills,
-		resolvedExtensions: [],
+		resolvedExtensions: [...new Set((profile.extensions ?? []).map((extension) => resolveExtension(extension, profile)))],
 	};
 }
