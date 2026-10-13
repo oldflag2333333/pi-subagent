@@ -8,7 +8,7 @@ A **profile** defines a specialist's instructions, tools, and optional skills or
 
 ## Install
 
-You need **Node.js 22.19+**, **[Pi](https://pi.dev) 1.0.4+**, and **Herdr**. To launch specialists, run Pi inside a Herdr workspace with the `herdr` command available.
+You need **Node.js 22.19+**, **[Pi](https://pi.dev) 1.2.0+**, and **Herdr**. To launch specialists, run Pi inside a Herdr workspace with the `herdr` command available.
 
 ```bash
 pi install npm:@oldflag2333333/pi-subagent
@@ -157,7 +157,7 @@ Close any orphaned Sub tabs before cleaning; the command only deletes files. Pro
 
 ## Things to know
 
-Messages use custom inbox cards. An idle receiver also gets a short user-role wake prompt to preserve its profile instructions. See [messaging behavior and the Pi wake workaround](docs/messaging.md).
+Messages use custom inbox cards and Pi’s native run preparation, without extra user-role wake messages. See [messaging behavior](docs/messaging.md).
 
 - **Herdr is required for Subs.** There is no headless fallback. Up to four Subs can be open at once, and Subs cannot delegate further.
 - **Profiles are not a sandbox.** Subs run as your OS user. A read-only role is not a filesystem permission boundary.

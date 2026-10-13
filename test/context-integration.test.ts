@@ -50,7 +50,7 @@ async function contextSession(root: string, requests: TranscriptContext[], facto
 		extensionFactories: [(pi) => {
 			registerFixtureModel(pi, requests);
 			factory(pi);
-			pi.on("before_agent_start", (event) => { promptHooks.push(event.prompt); });
+			pi.on("before_agent_start", (event) => { promptHooks.push(event.messageType === "user" ? event.prompt : event.messageType); });
 		}],
 	});
 	await resourceLoader.reload();
@@ -154,9 +154,9 @@ test("Main acknowledges a real SDK delivery only after its session receipt, then
 		const incoming = talkToMain(channel.channelDir, manifest, "Final review");
 		writeSubClosed(channel.channelDir, manifest, "Manual close");
 		manager!.start(mainContext!);
-		assert.equal(listTalkToMain(channel.channelDir, manifest).length, 0);
-		assert.ok(fs.existsSync(channel.channelDir), "The next scan finishes draining the closed channel");
-		// Idle cards are recorded synchronously before the separate user wake starts.
+		assert.equal(listTalkToMain(channel.channelDir, manifest).length, 1, "Keep the file while native run preparation is pending");
+		assert.ok(fs.existsSync(channel.channelDir));
+		// Pi records the custom receipt after native asynchronous run preparation.
 		await new Promise<void>((resolve) => setImmediate(resolve));
 		await fixture.session.waitForIdle();
 		const received = fixture.session.sessionManager.getEntries().filter((entry) => entry.type === "custom_message" && entry.customType === MESSAGE_TYPE);

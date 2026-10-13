@@ -9,7 +9,6 @@ import { createChannel, MESSAGE_TYPE, readManifest, talkToMain } from "../src/ch
 import { bindPromptSections } from "../src/profiles/system-prompt.js";
 import { CHANNEL_DEBOUNCE_MS, CHANNEL_RESCAN_MS } from "../src/channel-monitor.js";
 import { MainRunManager, RUN_ENTRY } from "../src/run-manager.js";
-import { PARENT_WAKE_TEXT } from "../src/parent-wake.js";
 
 async function until(condition: () => boolean): Promise<void> {
 	// Native filesystem notifications may be missed; allow the monitor's fallback scan.
@@ -73,7 +72,7 @@ async function fixture(root: string) {
 				},
 			});
 			bindPromptSections(pi, ["subagent_fixture"], () => ({ subagent_fixture: instructions }));
-			pi.on("before_agent_start", (event) => { promptHooks.push(event.prompt); });
+			pi.on("before_agent_start", (event) => { promptHooks.push(event.messageType === "user" ? event.prompt : event.messageType); });
 			pi.on("input", (event) => { inputSources.push(event.source); });
 			manager = new MainRunManager(pi);
 			pi.on("session_start", (_event, ctx) => { context = ctx; manager.start(ctx); });
@@ -105,7 +104,7 @@ async function fixture(root: string) {
 	};
 }
 
-test("idle talk bursts share one user wake, preserve inbox ordering, and survive reload", async () => {
+test("idle custom talk bursts preserve inbox ordering and prepare profiles after reload", async () => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-idle-queue-sdk-"));
 	const previous = process.env.XDG_RUNTIME_DIR;
 	process.env.XDG_RUNTIME_DIR = root;
@@ -120,13 +119,13 @@ test("idle talk bursts share one user wake, preserve inbox ordering, and survive
 		const first = talkToMain(f.channel.channelDir, readManifest(f.channel.channelDir), "First idle delivery");
 		const second = talkToMain(f.channel.channelDir, readManifest(f.channel.channelDir), "Second idle delivery");
 		f.rescan(); f.rescan();
-		await until(() => f!.requests.length === 2);
-		assert.deepEqual(f.inputSources, ["interactive", "extension"]);
-		assert.deepEqual(f.promptHooks, ["Initial Main task", PARENT_WAKE_TEXT]);
+		await until(() => f!.requests.length === 2 && f!.session.agent.peekQueuedMessages().length === 1);
+		assert.deepEqual(f.inputSources, ["interactive"]);
+		assert.deepEqual(f.promptHooks, ["Initial Main task", "custom"]);
 		assert.deepEqual(f.session.getFollowUpMessages(), [], "Custom follow-ups are not user editor input");
-		assert.equal(f.inboxEntries().length, 2, "Both inbox cards are appended before the shared wake starts");
+		assert.equal(f.inboxEntries().length, 1, "A queued custom message is not recorded until Pi consumes it");
 		f.finish();
-		await until(() => !fs.existsSync(path.join(f!.channel.channelDir, "to-main", second.id + ".json")));
+		await until(() => f!.requests.length === 3 && !fs.existsSync(path.join(f!.channel.channelDir, "to-main", second.id + ".json")));
 		await f.session.waitForIdle();
 		const ids = f.inboxEntries().map((entry) => entry.type === "custom_message" ? (entry.details as { messageId: string }).messageId : undefined);
 		assert.deepEqual(ids, [first.id, second.id]);
@@ -135,17 +134,20 @@ test("idle talk bursts share one user wake, preserve inbox ordering, and survive
 		await f.session.reload();
 		const third = talkToMain(f.channel.channelDir, readManifest(f.channel.channelDir), "/skill:not-a-command");
 		f.rescan(); f.rescan();
-		await until(() => f!.requests.length === 3 && !fs.existsSync(path.join(f!.channel.channelDir, "to-main", third.id + ".json")));
+		await until(() => f!.requests.length === 4 && !fs.existsSync(path.join(f!.channel.channelDir, "to-main", third.id + ".json")));
 		await f.session.waitForIdle();
-		assert.deepEqual(f.inputSources, ["interactive", "extension", "extension"]);
+		assert.deepEqual(f.inputSources, ["interactive"]);
+		assert.deepEqual(f.promptHooks, ["Initial Main task", "custom", "custom"]);
 		assert.equal(f.inboxEntries().length, 3);
-		assert.match(JSON.stringify(f.requests[2]!.messages), /\/skill:not-a-command/);
-		assert.match(getCurrentSystemMessage(f.requests[2]!.messages)?.sections?.subagent_fixture ?? "", /Updated role after reload/);
+		assert.match(JSON.stringify(f.requests[3]!.messages), /\/skill:not-a-command/);
+		assert.match(getCurrentSystemMessage(f.requests[3]!.messages)?.sections?.subagent_fixture ?? "", /Updated role after reload/);
+		const userEntries = f.session.sessionManager.getEntries().filter((entry) => entry.type === "message" && entry.message.role === "user");
+		assert.equal(userEntries.length, 1, "Peer deliveries must not add user-role wake messages");
 
 		const hooksBeforePrompt = f.promptHooks.length;
 		await f.session.prompt("Apply updated configuration");
 		assert.equal(f.promptHooks.length, hooksBeforePrompt + 1);
-		assert.match(getCurrentSystemMessage(f.requests[3]!.messages)?.sections?.subagent_fixture ?? "", /Updated role after reload/);
+		assert.match(getCurrentSystemMessage(f.requests[4]!.messages)?.sections?.subagent_fixture ?? "", /Updated role after reload/);
 		assert.deepEqual(f.errors, []);
 	} finally {
 		await f?.session.abort();
@@ -166,8 +168,9 @@ test("the first idle talk prepares profile sections without any prior user promp
 		talkToMain(f.channel.channelDir, readManifest(f.channel.channelDir), "First task result");
 		f.rescan();
 		await until(() => f!.requests.length === 1);
-		assert.deepEqual(f.promptHooks, [PARENT_WAKE_TEXT]);
-		assert.deepEqual(f.inputSources, ["extension"]);
+		assert.deepEqual(f.promptHooks, ["custom"]);
+		assert.deepEqual(f.inputSources, []);
+		assert.equal(f.session.sessionManager.getEntries().filter((entry) => entry.type === "message" && entry.message.role === "user").length, 0);
 		assert.equal(f.inboxEntries().length, 1);
 		assert.match(getCurrentSystemMessage(f.requests[0]!.messages)?.sections?.subagent_fixture ?? "", /Fixture role instructions/);
 		f.finish();
@@ -182,8 +185,8 @@ test("the first idle talk prepares profile sections without any prior user promp
 	}
 });
 
-// Regression for Pi #10267/#5581: parentWake enters normal prompt preparation.
-test("parentWake preserves profile sections through idle wakes and subsequent busy follow-ups", async () => {
+// Pi 1.2+ fixes #10267/#5581 natively; keep this as a required passing regression.
+test("native custom delivery preserves profile sections through idle wakes and subsequent busy follow-ups", async () => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-upstream-prompt-"));
 	const previous = process.env.XDG_RUNTIME_DIR;
 	process.env.XDG_RUNTIME_DIR = root;

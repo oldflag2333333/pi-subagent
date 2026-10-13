@@ -1,28 +1,17 @@
 # Message delivery and rendering
 
-Main ↔ Sub messages remain custom inbox cards. Delivery uses the same `parentWake` wrapper in both directions:
+Pi Subagent requires **Pi 1.2.0 or newer**. Main ↔ Sub messages use `pi.sendMessage()` with `deliverAs: "followUp"` and `triggerTurn: true` in both directions:
 
-- **Busy receiver:** `pi.sendMessage()` with `deliverAs: "followUp"` and `triggerTurn: true`, using Pi's native queue.
-- **Idle receiver:** append the card with `pi.sendMessage(..., { triggerTurn: false })`, then start the run with a short, fixed `pi.sendUserMessage(..., { deliverAs: "steer" })` prompt. This goes through normal input preparation and `before_agent_start`.
+- **Busy receiver:** Pi queues the custom message behind its current work.
+- **Idle receiver:** Pi prepares and starts the run, including `before_agent_start`, the tool loadout, and prompt sections. The event has `messageType: "custom"`, with the starting `message` rather than a user `prompt`.
 
-The wake is a real, visible user-role message added by the extension, not a duplicate of the peer's message. It only asks the receiving agent to process its inbox within its existing task and authority. Peer text stays in the custom card and is never submitted as executable slash-command input.
+There are no synthetic user-role wake messages, version fallbacks, or patches to Pi internals. Custom messages do not pass through user-input processing or execute peer text as slash commands or templates.
 
 ## Delivery guarantees
 
 - `content` carries the peer message and routing instructions; `details` carries rendering and receipt metadata and is not sent to the model.
 - Custom cards retain their title, collapsed/expanded rendering, and saved-session rendering.
-- A message file is removed only after its receipt appears in the receiving session. Legacy user-message receipts remain recognized.
-- An idle burst shares one wake while that wake is starting. Reservations survive `/reload`, are scoped to the receiving session, and clear on `agent_start` or non-reload shutdown.
-- If a wake never starts, a later idle delivery can request another wake after ten seconds. The deadline does not create a timer or promise autonomous retry after an input hook handles the wake.
-- A synchronous wake failure keeps the message file retryable; retrying does not append the custom card again. Pi's fire-and-forget extension API does not expose asynchronous prompt failures as delivery receipts.
+- A message file is removed only after its receipt appears in the receiving session. Existing user-message receipts remain recognized to avoid redelivery of saved messages; this is data compatibility, not support for older Pi runtimes.
+- In-flight message IDs prevent duplicate submission. Synchronous submission failures leave the file retryable. Pi owns run preparation and queueing; the plugin does not keep a separate wake reservation or retry timer.
 
-## Why the workaround exists
-
-Pi 1.0.4 and 1.1.0 have an idle custom-message wake path that bypasses `before_agent_start` and can drop profile prompt sections:
-
-- [#5581: custom-message starts bypass run preparation](https://github.com/earendil-works/pi/issues/5581)
-- [#10267: contributed prompt sections are dropped](https://github.com/earendil-works/pi/issues/10267)
-
-The implementation adapts [nicobailon/pi-subagents' parentWake](https://github.com/nicobailon/pi-subagents/blob/0c33ec7cb26ed1db270d72e746c3c975be880aeb/src/shared/parent-wake.ts), with retries for synchronous wake failures. Attribution and the MIT license are in [third-party notices](third-party-notices.md).
-
-Real Pi SDK tests cover the first idle wake, subsequent turns, busy follow-ups, and reload. The previous upstream TODO is now a required passing regression test. This workaround does not patch Pi internals or claim to fix unrelated retry/resume paths in Pi itself.
+Pi 1.2.0 includes the native custom-message preparation fix in [#10739](https://github.com/earendil-works/pi/pull/10739), resolving [#5581](https://github.com/earendil-works/pi/issues/5581) and [#10267](https://github.com/earendil-works/pi/issues/10267). Real SDK regression tests require profile sections to remain present on the first idle delivery, subsequent turns, busy follow-ups, and after reload. No upstream TODO or workaround is retained.

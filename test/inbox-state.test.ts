@@ -25,7 +25,6 @@ function fixture() {
 		signal: new AbortController().signal,
 	} as unknown as ExtensionContext;
 	const pi = { on: (event: string, handler: (...args: any[]) => unknown) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
-		sendUserMessage: () => {},
 		sendMessage: (message: any) => sent.push(message),
 	} as unknown as ExtensionAPI;
 	let wakes = 0;
