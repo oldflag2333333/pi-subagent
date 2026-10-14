@@ -62,6 +62,43 @@ test("fresh persistent Subs use their Main's directory while ephemeral Subs rema
 	}
 });
 
+test("does not submit a long resume command until the shell readiness wait completes", async () => {
+	const previous = process.env.HERDR_WORKSPACE_ID;
+	process.env.HERDR_WORKSPACE_ID = "w1";
+	const calls: string[][] = [];
+	let release!: () => void;
+	let observed!: () => void;
+	const waiting = new Promise<void>((resolve) => { observed = resolve; });
+	const gate = new Promise<void>((resolve) => { release = resolve; });
+	const pi = { exec: async (_command: string, args: string[]) => {
+		calls.push(args);
+		if (args[1] === "create") return { code: 0, stdout: JSON.stringify({ tab: { tab_id: "tab" }, root_pane: { pane_id: "pane" } }), stderr: "", killed: false };
+		if (args[1] === "wait-output") { observed(); await gate; }
+		return { code: 0, stdout: "{}", stderr: "", killed: false };
+	} } as unknown as ExtensionAPI;
+	const sessionFile = `/saved sessions/${"历史".repeat(300)}/saved.jsonl`;
+	const adapter = new HerdrTabAdapter(pi);
+	const launched = adapter.launch({ ...spec, resumeSessionFile: sessionFile });
+	try {
+		await waiting;
+		assert.equal(calls.some((args) => args[1] === "start"), false);
+		release();
+		await launched;
+		const start = calls.find((args) => args[1] === "start")!;
+		assert.ok(Buffer.byteLength(start.join(" ")) > 1024);
+		assert.equal(start[start.indexOf("--session") + 1], sessionFile);
+		// Each launch uses a new marker, even when restoring the same Sub.
+		await adapter.launch({ ...spec, resumeSessionFile: sessionFile });
+		const waits = calls.filter((args) => args[1] === "wait-output");
+		assert.notEqual(waits[0]![4], waits[1]![4]);
+	} finally {
+		release();
+		await launched.catch(() => {});
+		if (previous === undefined) delete process.env.HERDR_WORKSPACE_ID;
+		else process.env.HERDR_WORKSPACE_ID = previous;
+	}
+});
+
 test("reads live agent status by pane and does not guess on errors or mismatches", async () => {
 	let stdout = JSON.stringify({ result: { agent: { pane_id: "w1:p2", tab_id: "w1:t2", agent_status: "working" } } });
 	let code = 0;
@@ -91,7 +128,7 @@ test("rolls back every post-creation failure without reusing the cancelled signa
 	const previous = process.env.HERDR_WORKSPACE_ID;
 	process.env.HERDR_WORKSPACE_ID = "w1";
 	try {
-		for (const stage of ["start", "report-metadata", "prompt"]) {
+		for (const stage of ["run", "wait-output", "start", "report-metadata", "prompt"]) {
 			for (const failure of ["exit", "throw", "killed", "abort"]) {
 				await t.test(`${stage}: ${failure}`, async () => {
 					const calls: Array<{ args: string[]; signal?: AbortSignal }> = [];
@@ -109,6 +146,9 @@ test("rolls back every post-creation failure without reusing the cancelled signa
 					await assert.rejects(() => new HerdrTabAdapter(pi).launch(spec, controller.signal), /Process failed|Cancelled/);
 					assert.deepEqual(calls.at(-1), { args: ["tab", "close", "tab"], signal: undefined });
 					assert.equal(calls.filter((call) => call.args[1] === "close").length, 1);
+					if (stage === "run" || stage === "wait-output") {
+						assert.equal(calls.some((call) => call.args[1] === "start"), false);
+					}
 				});
 			}
 		}
@@ -212,9 +252,23 @@ test("starts an idle Pi before submitting work through herdr agent prompt", asyn
 	try {
 		const handle = await new HerdrTabAdapter(fakePi).launch(spec);
 		assert.deepEqual(handle, { adapter: "herdr", tabId: "w1:t2", paneId: "w1:p2" });
+		const probe = calls.find((call) => call.args[0] === "pane" && call.args[1] === "run");
+		const ready = calls.find((call) => call.args[0] === "pane" && call.args[1] === "wait-output");
+		assert.ok(probe);
+		assert.ok(ready);
+		const command = probe.args[3]!;
+		assert.match(command, /^echo pi-subagent-shell-ready-[a-f0-9-]+$/);
+		assert.ok(Buffer.byteLength(command) < 128);
+		const pattern = ready.args[ready.args.indexOf("--regex") + 1]!;
+		assert.equal(new RegExp(pattern).test(command), false, "The echoed probe is not proof of readiness");
+		assert.equal(new RegExp(pattern).test(command.slice("echo ".length)), true);
+		assert.equal(ready.args[ready.args.indexOf("--source") + 1], "recent-unwrapped");
+		assert.equal(ready.args[2], probe.args[2]);
 		const start = calls.find((call) => call.args[0] === "agent" && call.args[1] === "start");
 		const prompt = calls.find((call) => call.args[0] === "agent" && call.args[1] === "prompt");
 		assert.ok(start);
+		assert.ok(calls.indexOf(probe) < calls.indexOf(ready));
+		assert.ok(calls.indexOf(ready) < calls.indexOf(start));
 		assert.ok(prompt);
 		const metadata = calls.find((call) => call.args[0] === "pane" && call.args[1] === "report-metadata");
 		assert.equal(start.args.includes(spec.task), false);

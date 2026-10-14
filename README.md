@@ -184,6 +184,8 @@ Messages use custom inbox cards and Pi’s native run preparation, without extra
 - **Subs have separate conversations.** They receive their task, profile, and normal project context—not Main's chat history. Include the details they need in the task.
 - **Reloading Main does not close Subs.** Close tabs you no longer need. Hard crashes may require manual cleanup.
 
+Before a fresh or resumed Sub launch, the plugin submits a short shell probe and waits up to 60 seconds for it to execute before submitting the full Pi command. This avoids macOS truncating long commands (especially resume paths) and dropping Enter while the shell is still initializing. The wait is cancellable; launch failure attempts to close the new tab rather than sending Enter to a partial command. See [Herdr issue #4950](https://github.com/herdrdev/herdr/issues/4950).
+
 If a profile is missing or fails to start, run `/profiles` first. Check its directory/name match, project trust, and any referenced tools, skills, or extensions. If Herdr is unavailable, confirm Pi is running inside a Herdr workspace.
 
 To hide or show Pi Subagent Subs in Herdr's Agents panel, see the optional [Herdr companion plugin](herdr-plugin/README.md).

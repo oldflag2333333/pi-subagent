@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -99,6 +100,16 @@ export class HerdrTabAdapter implements SubSurfaceAdapter {
 		try {
 			if (created.code !== 0 || created.killed) throw new Error(created.stderr || "Failed to create Herdr tab.");
 			if (!paneId) throw new Error("Herdr tab creation response did not contain a root pane ID.");
+			// A new pane's shell can still be initializing in canonical mode.
+			// On macOS a long launch line can lose its tail (including Enter).
+			// Execute a short probe first; match only its output, never the echoed
+			// command. Unwrapped rows keep a wrapped command from matching early.
+			const readyMarker = `pi-subagent-shell-ready-${randomUUID()}`;
+			await step(["pane", "run", paneId, `echo ${readyMarker}`], 10_000, "Failed to probe the Sub shell.");
+			await step([
+				"pane", "wait-output", paneId, "--regex", `^${readyMarker}$`,
+				"--source", "recent-unwrapped", "--timeout", "60000",
+			], 65_000, "The Sub shell did not become ready.");
 			const name = agentName(spec.runId);
 			await step([
 				"agent", "start", name, "--kind", "pi", "--pane", paneId, "--timeout", "60000", "--", ...subArgs(spec),
