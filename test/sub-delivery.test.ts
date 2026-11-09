@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { test } from "node:test";
 import { SessionManager, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createChannel, listTalkToSub, readManifest, talkToSub, writeClose } from "../src/channel.js";
+import { SUB_OWNER_ENTRY } from "../src/sessions.js";
 
 // Fake timers exercise the actual Sub poller without wall-clock sleeps.
 test("Sub retains failed messages, isolates protocol errors, and shuts down only once", async (t) => {
@@ -27,7 +28,8 @@ test("Sub retains failed messages, isolates protocol errors, and shuts down only
 	let shutdowns = 0;
 	const pi = {
 		on: (event: string, handler: (...args: any[]) => unknown) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
-		registerTool: () => {}, registerMessageRenderer: () => {}, setSessionName: () => {},
+		registerTool: () => {}, registerCommand: () => {}, registerMessageRenderer: () => {}, setSessionName: () => {},
+		appendEntry: (type: string, data: unknown) => session.appendCustomEntry(type, data),
 		getAllTools: () => [{ name: "read" }, { name: "talk" }], setActiveTools: () => {}, getActiveTools: () => ["read", "talk"],
 		sendMessage: (message: any) => {
 			if (failing) throw new Error("Submission failed");
@@ -45,6 +47,10 @@ test("Sub retains failed messages, isolates protocol errors, and shuts down only
 		const { registerSub } = await import("../src/tools/sub.js");
 		registerSub(pi);
 		fire("session_start", {});
+		fire("session_start", { reason: "reload" });
+		const owners = session.getEntries().filter((entry) => entry.type === "custom" && entry.customType === SUB_OWNER_ENTRY);
+		assert.equal(owners.length, 1);
+		assert.equal((owners[0] as any).data.mainSessionId, channel.mainSessionId);
 		fire("resources_discover", { reason: "startup" });
 		talkToSub(channel.channelDir, manifest, "Initial message");
 		t.mock.timers.tick(20);

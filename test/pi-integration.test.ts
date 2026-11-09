@@ -11,6 +11,7 @@ import {
 	createMcpExtension,
 	type McpExtensionOptions,
 	createToolSearchExtension,
+	AgentSessionRuntime,
 	DefaultResourceLoader,
 	ModelRuntime,
 	SessionManager,
@@ -235,6 +236,59 @@ test("Main delegate stays directly active but is not callable from nested tools"
 		assert.deepEqual(nested.details, { isError: true });
 	} finally {
 		session?.dispose();
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("Sub cancels fork and clone before session replacement without affecting Main", async () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-pi-fork-"));
+	const previous = Object.fromEntries(["PI_CODING_AGENT_DIR", "PI_SUBAGENT_ROLE", "PI_SUBAGENT_CHANNEL", "PI_SUBAGENT_TOKEN", "XDG_RUNTIME_DIR"].map((key) => [key, process.env[key]]));
+	process.env.PI_CODING_AGENT_DIR = path.join(root, "agent");
+	process.env.XDG_RUNTIME_DIR = root;
+	process.env.PI_SUBAGENT_ROLE = "sub";
+	const channel = createChannel({ runId: "fork-sub", mainSessionId: "main", title: "Review", task: "Review", cwd: root, profile: profile(["read"]) });
+	process.env.PI_SUBAGENT_CHANNEL = channel.channelDir;
+	process.env.PI_SUBAGENT_TOKEN = channel.token;
+	let session: Awaited<ReturnType<typeof openSession>> | undefined;
+	try {
+		const { default: piSubagent } = await import("../src/index.js");
+		session = await openSession(root, [], piSubagent, undefined, ["read", "talk"]);
+		const warnings: string[] = [];
+		session.extensionRunner!.setUIContext({
+			...session.extensionRunner!.getUIContext(),
+			notify: (message, type) => { assert.equal(type, "warning"); warnings.push(message); },
+		});
+		const manager = session.sessionManager;
+		const entryId = manager.appendMessage({ role: "user", content: "Review this code", timestamp: Date.now() });
+		session.refreshContext();
+		const sessionId = manager.getSessionId();
+		const entries = structuredClone(manager.getEntries());
+		const runtime = new AgentSessionRuntime(session, {
+			cwd: root, agentDir: path.join(root, "agent"), modelRuntime: session.modelRuntime,
+			settingsManager: session.settingsManager, resourceLoader: session.resourceLoader, diagnostics: [],
+		}, async () => assert.fail("A cancelled fork must not create a replacement runtime"));
+		for (const position of ["before", "at"] as const) {
+			assert.deepEqual(await runtime.fork(entryId, { position }), { cancelled: true });
+			assert.equal(runtime.session, session);
+			assert.equal(manager.getSessionId(), sessionId);
+			assert.deepEqual(manager.getEntries(), entries);
+		}
+		assert.deepEqual(warnings, Array(2).fill("Sub sessions do not support /fork or /clone."));
+		await issueCall(session, "talk", { message: "Still connected after cancelled fork" });
+		assert.equal(listTalkToMain(channel.channelDir, readManifest(channel.channelDir))[0]?.message, "Still connected after cancelled fork");
+		await session.extensionRunner!.emit({ type: "session_shutdown", reason: "reload" });
+		session.dispose();
+		session = undefined;
+
+		delete process.env.PI_SUBAGENT_ROLE;
+		session = await openSession(root, [], piSubagent);
+		assert.equal(session.extensionRunner!.hasHandlers("session_before_fork"), false, "Main keeps native fork/clone behavior");
+	} finally {
+		await session?.extensionRunner?.emit({ type: "session_shutdown", reason: "reload" });
+		session?.dispose();
+		for (const [key, value] of Object.entries(previous)) {
+			if (value === undefined) delete process.env[key]; else process.env[key] = value;
+		}
 		fs.rmSync(root, { recursive: true, force: true });
 	}
 });

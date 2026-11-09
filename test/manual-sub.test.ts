@@ -7,7 +7,7 @@ import { SessionManager, type ExtensionAPI, type ExtensionContext } from "@earen
 import { listTalkToSub, readManifest, talkToMain, writeSubClosed, writeSubSessionInfo } from "../src/channel.js";
 import { MANUAL_MAIN_GUIDANCE } from "../src/manual-context.js";
 import { MainRunManager } from "../src/run-manager.js";
-import { subSessionDir } from "../src/sessions.js";
+import { recordSubSessionOwner, SUB_OWNER_ENTRY, SUB_SESSION_ID } from "../src/sessions.js";
 import { cleanSubFiles } from "../src/commands/clean-sub.js";
 import type { ResolvedProfile } from "../src/profiles/types.js";
 
@@ -51,8 +51,11 @@ function fixture() {
 			const resumeIndex = args.indexOf("--session");
 			const dirIndex = args.indexOf("--session-dir");
 			const directory = dirIndex >= 0 ? args[dirIndex + 1] : undefined;
-			const sub = resumeIndex >= 0 ? SessionManager.open(args[resumeIndex + 1]!, directory) : SessionManager.create(root, directory);
-			assert.ok(sub);
+			const manifest = readManifest(channelDir);
+			const sub = resumeIndex >= 0 ? SessionManager.open(args[resumeIndex + 1]!, directory)
+				: SessionManager.create(manifest.cwd, directory, { id: args[args.indexOf("--session-id") + 1]! });
+			recordSubSessionOwner({ appendEntry: (type: string, data: unknown) => sub.appendCustomEntry(type, data) } as unknown as ExtensionAPI,
+				{ sessionManager: sub } as unknown as ExtensionContext, manifest.mainSessionId, manifest.mainSessionFile);
 			sub.appendSessionInfo(args[args.indexOf("--name") + 1]!);
 			sub.appendMessage({ role: "user", content: "Fixture Sub task", timestamp: Date.now() });
 			writeSubSessionInfo(channelDir, readManifest(channelDir), { sessionId: sub.getSessionId(), sessionFile: sub.getSessionFile()! });
@@ -86,7 +89,12 @@ test("manual invocations serialize creation, reuse busy Subs, and survive Main r
 	assert.equal(created.action, "created");
 	assert.equal(queued.action, "queued");
 	assert.equal(created.run.subSessionId, queued.run.subSessionId);
-	assert.equal(path.dirname(created.run.subSessionFile!), subSessionDir(first.main.getSessionId()));
+	assert.equal(path.dirname(created.run.subSessionFile!), first.main.getSessionDir());
+	assert.match(created.run.subSessionId!, SUB_SESSION_ID);
+	const owner = f.starts[0]!.session.getEntries().find((entry) => entry.type === "custom" && entry.customType === SUB_OWNER_ENTRY);
+	assert.equal((owner as any).data.mainSessionId, first.main.getSessionId());
+	assert.ok(first.main.getEntries().some((entry) => entry.type === "custom" && entry.customType === "subagent-run"
+		&& (entry.data as any).subSessionId === created.run.subSessionId));
 	assert.equal(f.starts.length, 1);
 	assert.equal(readManifest(created.run.channelDir).origin, "manual");
 	assert.ok(f.starts[0]!.args.includes("[sub:manual] review"));
@@ -99,6 +107,20 @@ test("manual invocations serialize creation, reuse busy Subs, and survive Main r
 	assert.equal(again.run.runId, created.run.runId);
 	assert.equal(f.starts.length, 1);
 	assert.equal((await reloaded.manager.subs()).open[0]!.run.origin, "manual");
+});
+
+test("same-cwd Subs inherit custom storage while other-cwd Subs use native grouping", async () => {
+	const f = fixture();
+	f.profile.invocation = "both";
+	const main = f.attach(SessionManager.create(root, path.join(root, "custom-store")));
+	const task = { profile: f.profile, cwd: root, title: "Review", task: "Review code" };
+	const same = await main.manager.delegate(task);
+	assert.equal(path.dirname(same.subSessionFile!), main.main.getSessionDir());
+	const otherCwd = path.join(root, "other");
+	const other = await main.manager.delegate({ ...task, cwd: otherCwd });
+	assert.equal(f.starts[1]!.args.includes("--session-dir"), false);
+	assert.equal(path.dirname(other.subSessionFile!), SessionManager.create(otherCwd).getSessionDir());
+	assert.notEqual(other.subSessionId, same.subSessionId);
 });
 
 test("closed persistent profiles resume the exact session after Main restart", async () => {
@@ -119,7 +141,8 @@ test("closed persistent profiles resume the exact session after Main restart", a
 	assert.equal(resumed.run.subSessionId, created.run.subSessionId);
 	assert.equal(f.starts.length, 2);
 	assert.equal(f.starts[1]!.args[f.starts[1]!.args.indexOf("--session") + 1], created.run.subSessionFile);
-	assert.equal(path.dirname(resumed.run.subSessionFile!), subSessionDir(first.main.getSessionId()));
+	assert.equal(path.dirname(resumed.run.subSessionFile!), first.main.getSessionDir());
+	assert.equal(f.starts[1]!.session.getEntries().filter((entry) => entry.type === "custom" && entry.customType === SUB_OWNER_ENTRY).length, 1);
 });
 
 test("manual tab closure retains pending results and their specialist routing guidance", async () => {
@@ -256,7 +279,7 @@ test("a lost channel without confirmed closure is not listed as resumable after 
 	await assert.rejects(reloaded.manager.delegate({ ...task, resumeSessionId: run.subSessionId }), /belonging to this Main/);
 });
 
-test("deleting a Main lets /clean-sub remove its persistent Sub directory without an index", async () => {
+test("deleting a Main lets /clean-sub remove its native Sub session without touching other sessions", async () => {
 	const f = fixture();
 	const owner = f.attach();
 	const { run } = await owner.invoke();
@@ -264,10 +287,10 @@ test("deleting a Main lets /clean-sub remove its persistent Sub directory withou
 	owner.manager.shutdown();
 	const current = f.attach();
 	const { run: live } = await current.invoke();
-	assert.equal(cleanSubFiles(current.main.getSessionId(), current.main.getSessionDir()).removed, 0);
+	assert.equal((await cleanSubFiles(current.main.getSessionId(), current.main.getSessionDir())).removed, 0);
 	fs.unlinkSync(owner.main.getSessionFile()!);
-	assert.equal(cleanSubFiles(current.main.getSessionId(), current.main.getSessionDir()).removed, 2);
-	assert.equal(fs.existsSync(subSessionDir(owner.main.getSessionId())), false);
+	assert.equal((await cleanSubFiles(current.main.getSessionId(), current.main.getSessionDir())).removed, 1);
+	assert.ok(fs.existsSync(current.main.getSessionDir()));
 	assert.equal(fs.existsSync(run.subSessionFile!), false);
 	assert.ok(fs.existsSync(live.subSessionFile!));
 	assert.ok(fs.existsSync(live.channelDir));

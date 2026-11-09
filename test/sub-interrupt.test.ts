@@ -24,8 +24,10 @@ test("Sub aborts only the targeted turn and stays open", async () => {
 			handlers.set(event, [...(handlers.get(event) ?? []), handler]);
 		},
 		setSessionName: () => {},
+		appendEntry: () => {},
 		registerMessageRenderer: () => {},
 		registerTool: () => {},
+		registerCommand: () => {},
 		getAllTools: () => [{ name: "read" }, { name: "talk" }],
 		setActiveTools: () => {},
 		getActiveTools: () => ["read", "talk"],
@@ -39,7 +41,7 @@ test("Sub aborts only the targeted turn and stays open", async () => {
 		abort: () => { aborts++; idle = true; },
 		shutdown: () => { shutdowns++; },
 		ui: { setTitle: () => {}, setStatus: () => {} },
-		sessionManager: { getSessionFile: () => undefined, getSessionId: () => "sub-session" },
+		sessionManager: { getSessionFile: () => undefined, getSessionId: () => "sub-session", getEntries: () => [] },
 	} as unknown as ExtensionContext;
 	try {
 		// Register against the Sub\'s configured channel environment.

@@ -1,15 +1,43 @@
 import * as fs from "node:fs";
-import * as path from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { RunSnapshot } from "./types.js";
 
-export function subSessionsRoot(): string {
-	return path.join(getAgentDir(), "subagent", "sessions");
+export const SUB_OWNER_ENTRY = "subagent-owner";
+export const SUB_SESSION_ID = /^sub-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export interface SubSessionOwner {
+	version: 1;
+	subSessionId: string;
+	mainSessionId: string;
+	mainSessionFile?: string;
 }
 
-export function subSessionDir(mainSessionId: string): string {
-	if (!mainSessionId || mainSessionId === "." || mainSessionId === "..") throw new Error("Invalid Main session ID.");
-	return path.join(subSessionsRoot(), encodeURIComponent(mainSessionId));
+export function parseSubSessionOwner(value: unknown): SubSessionOwner {
+	const owner = value as Partial<SubSessionOwner> | undefined;
+	if (!owner || owner.version !== 1 || typeof owner.subSessionId !== "string"
+		|| typeof owner.mainSessionId !== "string" || !owner.mainSessionId
+		|| (owner.mainSessionFile !== undefined && typeof owner.mainSessionFile !== "string")) {
+		throw new Error("Invalid Sub session owner metadata.");
+	}
+	return owner as SubSessionOwner;
+}
+
+/** Ownership is session-wide, not branch-relative. Never silently reassign a Sub. */
+export function recordSubSessionOwner(pi: ExtensionAPI, ctx: ExtensionContext, mainSessionId: string, mainSessionFile?: string): void {
+	const subSessionId = ctx.sessionManager.getSessionId();
+	const entries = ctx.sessionManager.getEntries().filter((entry): entry is SessionEntry & { type: "custom" } =>
+		entry.type === "custom" && entry.customType === SUB_OWNER_ENTRY);
+	let previous: SubSessionOwner | undefined;
+	for (const entry of entries) {
+		const owner = parseSubSessionOwner(entry.data);
+		if (owner.subSessionId !== subSessionId || owner.mainSessionId !== mainSessionId) {
+			throw new Error("Sub session owner does not match this Main.");
+		}
+		previous = owner;
+	}
+	if (!previous || previous.mainSessionFile !== mainSessionFile) {
+		pi.appendEntry(SUB_OWNER_ENTRY, { version: 1, subSessionId, mainSessionId, ...(mainSessionFile ? { mainSessionFile } : {}) } satisfies SubSessionOwner);
+	}
 }
 
 export interface ResumableSubSession {

@@ -4,6 +4,7 @@ export interface DelegateManifest {
 	version: 1;
 	runId: string;
 	mainSessionId: string;
+	mainSessionFile?: string;
 	title: string;
 	task: string;
 	cwd: string;
@@ -96,8 +97,9 @@ export interface SubLaunchSpec {
 	cwd: string;
 	projectTrusted: boolean;
 	origin?: "manual";
-	resumeSessionId?: string;
-	/** Recorded path also supports sessions saved before per-Main directories. */
+	sessionId: string;
+	/** Same-cwd Subs inherit Main's session directory, including custom stores. */
+	sessionDir?: string;
 	resumeSessionFile?: string;
 	profile: ResolvedProfile;
 	channelDir: string;

@@ -6,7 +6,6 @@ import { test } from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { HerdrLaunchCleanupError, HerdrTabAdapter } from "../src/adapters/herdr.js";
 import type { SubLaunchSpec } from "../src/types.js";
-import { subSessionDir } from "../src/sessions.js";
 
 const spec: SubLaunchSpec = {
 	runId: "12345678-abcd-4000-8000-123456789abc",
@@ -15,7 +14,9 @@ const spec: SubLaunchSpec = {
 	task: "Research this topic and summarize it.",
 	cwd: "/tmp/project",
 	projectTrusted: true,
-	resumeSessionId: "session-to-resume",
+	sessionId: "sub-12345678-abcd-4000-8000-123456789abc",
+	sessionDir: "/tmp/native-sessions/--project--",
+	resumeSessionFile: "/tmp/native-sessions/--project--/saved.jsonl",
 	channelDir: "/tmp/channel",
 	token: "token",
 	entryPath: "/tmp/subagent.ts",
@@ -31,7 +32,7 @@ const spec: SubLaunchSpec = {
 	},
 };
 
-test("fresh persistent Subs use their Main's directory while ephemeral Subs remain in memory", async () => {
+test("fresh Subs use prefixed IDs and native storage while resumes preserve their ID", async () => {
 	const previous = process.env.HERDR_WORKSPACE_ID;
 	process.env.HERDR_WORKSPACE_ID = "w1";
 	const starts: string[][] = [];
@@ -42,20 +43,24 @@ test("fresh persistent Subs use their Main's directory while ephemeral Subs rema
 	} } as unknown as ExtensionAPI;
 	try {
 		const adapter = new HerdrTabAdapter(pi);
-		for (const mainSessionId of ["main-a", "main-b"]) {
-			await adapter.launch({ ...spec, mainSessionId, resumeSessionId: undefined });
+		for (const sessionDir of [spec.sessionDir, undefined]) {
+			await adapter.launch({ ...spec, sessionDir, resumeSessionFile: undefined });
 			const args = starts.at(-1)!;
-			assert.equal(args[args.indexOf("--session-dir") + 1], subSessionDir(mainSessionId));
+			assert.equal(args.includes("--session-dir"), !!sessionDir);
+			if (sessionDir) assert.equal(args[args.indexOf("--session-dir") + 1], sessionDir);
+			assert.equal(args[args.indexOf("--session-id") + 1], spec.sessionId);
 			assert.equal(args.includes("--session"), false);
 			assert.equal(args.includes("--no-session"), false);
 		}
-		await adapter.launch({ ...spec, resumeSessionId: undefined, profile: { ...spec.profile, sessionPersistence: "ephemeral" } });
+		await adapter.launch({ ...spec, resumeSessionFile: undefined, profile: { ...spec.profile, sessionPersistence: "ephemeral" } });
 		assert.ok(starts.at(-1)!.includes("--no-session"));
 		assert.equal(starts.at(-1)!.includes("--session-dir"), false);
-		await adapter.launch({ ...spec, resumeSessionFile: "/old/sessions/saved.jsonl" });
+		assert.equal(starts.at(-1)![starts.at(-1)!.indexOf("--session-id") + 1], spec.sessionId);
+		await adapter.launch(spec);
 		const resumed = starts.at(-1)!;
-		assert.equal(resumed[resumed.indexOf("--session") + 1], "/old/sessions/saved.jsonl");
-		assert.equal(resumed[resumed.indexOf("--session-dir") + 1], subSessionDir(spec.mainSessionId));
+		assert.equal(resumed[resumed.indexOf("--session") + 1], spec.resumeSessionFile);
+		assert.equal(resumed.includes("--session-id"), false);
+		assert.equal(resumed[resumed.indexOf("--session-dir") + 1], spec.sessionDir);
 	} finally {
 		if (previous === undefined) delete process.env.HERDR_WORKSPACE_ID;
 		else process.env.HERDR_WORKSPACE_ID = previous;
@@ -276,8 +281,8 @@ test("starts an idle Pi before submitting work through herdr agent prompt", asyn
 		assert.equal(start.args.includes("--no-extensions"), true);
 		assert.ok(start.args.some((arg, index) => arg === "-e" && start.args[index + 1] === "npm:pi-model-calibration"));
 		assert.equal(start.args.includes("--no-session"), false);
-		assert.deepEqual(start.args.slice(start.args.indexOf("--session-dir"), start.args.indexOf("--session-dir") + 2), ["--session-dir", subSessionDir(spec.mainSessionId)]);
-		assert.deepEqual(start.args.slice(start.args.indexOf("--session"), start.args.indexOf("--session") + 2), ["--session", "session-to-resume"]);
+		assert.deepEqual(start.args.slice(start.args.indexOf("--session-dir"), start.args.indexOf("--session-dir") + 2), ["--session-dir", spec.sessionDir]);
+		assert.deepEqual(start.args.slice(start.args.indexOf("--session"), start.args.indexOf("--session") + 2), ["--session", spec.resumeSessionFile]);
 		assert.equal(start.args.includes("--approve"), true);
 		assert.equal(start.args.includes("--no-approve"), false);
 		assert.ok(metadata);

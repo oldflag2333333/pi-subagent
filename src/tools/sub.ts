@@ -21,6 +21,8 @@ import { applyProfileTools } from "../profiles/tool-selection.js";
 import { MANUAL_SUB_GUIDANCE, subSessionName } from "../manual-context.js";
 import { talkView } from "../talk-render.js";
 import { ChannelMonitor } from "../channel-monitor.js";
+import { recordSubSessionOwner } from "../sessions.js";
+import { registerCleanSubCommand } from "../commands/clean-sub.js";
 import { bindInboxEvents } from "../inbox-state.js";
 import { deliverTalk, ProtocolErrors } from "../talk-delivery.js";
 import type { ActiveTurn, DelegateManifest } from "../types.js";
@@ -61,6 +63,12 @@ export function registerSub(pi: ExtensionAPI): void {
 	);
 	bindInboxEvents(pi, () => activeContext, () => monitor.wakeAll());
 
+	// Fork/clone would copy ownership metadata into a different session.
+	pi.on("session_before_fork", (_event, ctx) => {
+		ctx.ui.notify("Sub sessions do not support /fork or /clone.", "warning");
+		return { cancel: true };
+	});
+
 	// Pi emits resource discovery after all session_start handlers, including
 	// extensions that register the profile's tools dynamically during startup.
 	pi.on("resources_discover", (_event, ctx) => {
@@ -77,6 +85,7 @@ export function registerSub(pi: ExtensionAPI): void {
 
 	pi.on("session_start", (_event, ctx) => {
 		activeContext = ctx;
+		recordSubSessionOwner(pi, ctx, loaded.manifest.mainSessionId, loaded.manifest.mainSessionFile);
 		pi.setSessionName(subSessionName(loaded.manifest.title, loaded.manifest.origin));
 		ctx.ui.setTitle(`[sub] ${loaded.manifest.title}`);
 		ctx.ui.setStatus("subagent", `sub · ${loaded.manifest.profile.name}`);
@@ -212,4 +221,6 @@ export function registerSub(pi: ExtensionAPI): void {
 			writeSubClosed(loaded.channelDir, loaded.manifest, "The Sub session was closed manually.");
 		}
 	});
+	// Run after the Sub shutdown protocol, and preserve its still-active owning Main.
+	registerCleanSubCommand(pi, loaded.manifest.mainSessionId);
 }

@@ -3,7 +3,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
-import { resolveResumableSubSession, selectResumableSubSessions } from "../src/sessions.js";
+import { SessionManager, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { recordSubSessionOwner, resolveResumableSubSession, selectResumableSubSessions, SUB_OWNER_ENTRY } from "../src/sessions.js";
 import type { RunSnapshot } from "../src/types.js";
 
 let root: string;
@@ -19,6 +20,25 @@ function run(id: string, overrides: Partial<RunSnapshot> = {}): RunSnapshot {
 		createdAt: 1, updatedAt: 2, closedAt: 2, subSessionId: id, subSessionFile: file, ...overrides,
 	};
 }
+
+test("Sub ownership persists natively, survives reopen, and is not duplicated on reload", () => {
+	const sub = SessionManager.create(root, root, { id: "sub-12345678-abcd-4000-8000-123456789abc" });
+	const pi = { appendEntry: (type: string, data: unknown) => sub.appendCustomEntry(type, data) } as unknown as ExtensionAPI;
+	const ctx = { sessionManager: sub } as unknown as ExtensionContext;
+	const mainFile = path.join(root, "main.jsonl");
+	recordSubSessionOwner(pi, ctx, "main", mainFile);
+	recordSubSessionOwner(pi, ctx, "main", mainFile);
+	sub.appendMessage({ role: "user", content: "Task", timestamp: Date.now() });
+	const reopened = SessionManager.open(sub.getSessionFile()!);
+	const entries = reopened.getEntries().filter((entry) => entry.type === "custom" && entry.customType === SUB_OWNER_ENTRY);
+	assert.equal(entries.length, 1);
+	assert.deepEqual((entries[0] as any).data, { version: 1, subSessionId: sub.getSessionId(), mainSessionId: "main", mainSessionFile: mainFile });
+	assert.equal(reopened.buildSessionContext().messages.length, 1, "Ownership must not enter model context");
+	assert.throws(() => recordSubSessionOwner(pi, ctx, "other", mainFile), /does not match this Main/);
+	const movedFile = path.join(root, "moved-main.jsonl");
+	recordSubSessionOwner(pi, ctx, "main", movedFile);
+	assert.equal(sub.getEntries().filter((entry) => entry.type === "custom" && entry.customType === SUB_OWNER_ENTRY).length, 2);
+});
 
 test("selects only this Main's confirmed-closed persistent sessions with saved files", () => {
 	const missing = run("missing");

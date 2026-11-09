@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { AdapterRegistry } from "./adapters/index.js";
@@ -189,11 +190,16 @@ export class MainRunManager {
 		}
 		const runId = randomUUID();
 		const mainSessionId = this.ctx.sessionManager.getSessionId();
+		const mainSessionFile = this.ctx.sessionManager.getSessionFile();
+		const subSessionId = resume?.sessionId ?? `sub-${randomUUID()}`;
 		const projectTrusted = this.ctx.isProjectTrusted();
 		const cwd = resume?.cwd ?? input.cwd;
+		const sessionDir = resume ? path.dirname(resume.sessionFile)
+			: path.resolve(cwd) === path.resolve(this.ctx.cwd) ? this.ctx.sessionManager.getSessionDir() : undefined;
 		const channel = createChannel({
 			runId,
 			mainSessionId,
+			...(mainSessionFile ? { mainSessionFile } : {}),
 			title: input.title,
 			task: input.task,
 			cwd,
@@ -212,7 +218,8 @@ export class MainRunManager {
 			channelDir: channel.channelDir,
 			createdAt: Date.now(),
 			updatedAt: Date.now(),
-			...(resume ? { subSessionId: resume.sessionId, subSessionFile: resume.sessionFile } : {}),
+			subSessionId,
+			...(resume ? { subSessionFile: resume.sessionFile } : {}),
 		};
 		try {
 			this.save(run);
@@ -226,7 +233,9 @@ export class MainRunManager {
 				cwd,
 				projectTrusted,
 				...(input.origin ? { origin: input.origin } : {}),
-				...(resume ? { resumeSessionId: resume.sessionId, resumeSessionFile: resume.sessionFile } : {}),
+				sessionId: subSessionId,
+				sessionDir,
+				...(resume ? { resumeSessionFile: resume.sessionFile } : {}),
 				profile: input.profile,
 				channelDir: channel.channelDir,
 				token: channel.token,

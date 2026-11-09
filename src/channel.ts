@@ -100,6 +100,7 @@ export function readManifest(channelDir: string): DelegateManifest {
 	const value = record(readJson(path.join(channelDir, "manifest.json")));
 	if (!value || value.version !== 1 || typeof value.runId !== "string" || typeof value.mainSessionId !== "string"
 		|| typeof value.title !== "string" || typeof value.task !== "string" || typeof value.cwd !== "string"
+		|| (value.mainSessionFile !== undefined && (typeof value.mainSessionFile !== "string" || !path.isAbsolute(value.mainSessionFile)))
 		|| (value.origin !== undefined && value.origin !== "manual")
 		|| !validProfile(value.profile) || typeof value.token !== "string" || typeof value.createdAt !== "number") {
 		throw new Error("Invalid Pi Subagent channel manifest.");

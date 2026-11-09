@@ -164,21 +164,28 @@ These instructions apply only to your main Pi, not to its Subs. Keep shared proj
 
 ## Clean up deleted sessions
 
-Persistent Sub histories are grouped by their owning Main, using Pi's native `--session-dir`:
+Persistent Subs use Pi's native session store alongside ordinary sessions, with IDs of the form `sub-<UUID>`:
 
 ```text
-~/.pi/agent/subagent/sessions/<main-session-id>/*.jsonl
+~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_sub-<UUID>.jsonl
 ```
 
-Run `/clean-sub` to immediately delete both the Sub session directory and runtime communication directory for any Main ID no longer found among saved Pi sessions. It checks Pi's default session store and the current session directory, always preserves the current Main, and creates no index. Unreadable session files or invalid headers stop cleanup instead of being treated as deleted.
+Same-cwd Subs inherit Main's session directory (including `--session-dir` overrides); Subs launched in another cwd use Pi's normal storage for that cwd. Ephemeral Subs still use `--no-session`. Native `/resume` can discover saved Subs; `--continue` may therefore select a Sub if it is the most recent session.
 
-Close any orphaned Sub tabs before cleaning; the command only deletes files. Profiles and global settings are untouched. Older Sub files outside the managed directory still need manual deletion. If you moved Main files or use other custom session directories, make them available in the scanned locations before cleaning.
+Ownership is stored in both directions: Main's `subagent-run` custom entries record Sub IDs and paths, and each Sub's `subagent-owner` custom entry records its own ID and Main's ID and file path. These entries do not enter model context. Reloading or resuming does not duplicate unchanged ownership metadata.
+
+- `/clean-sub` permanently deletes orphaned Sub JSONL files across Pi's native session store and the current custom session directory, plus orphaned runtime communication directories. A Sub is orphaned when its recorded Main ID cannot be found. Recorded Main file paths also protect owners stored outside native discovery.
+- On Pi exit (`session_shutdown` with reason `quit`), the same cleanup runs automatically, limited to Subs whose session-header cwd matches the current cwd. Switching sessions, forking, and reloading do not trigger cleanup. Main existence is still checked across projects to protect cross-cwd Subs.
+- The current session/owning Main is always preserved, including unsaved sessions. Missing ownership metadata is preserved with a warning; unreadable files, invalid headers, or conflicting ownership abort cleanup before deletion. Shared session directories, ordinary sessions, profiles, and settings are never deleted. No separate index or legacy-storage migration is used.
+
+Close orphaned Sub tabs before cleaning; cleanup deletes files, not running agents. Custom stores other than the current session directory are not scanned for Sub files; run `/clean-sub` from those stores when needed.
 
 ## Things to know
 
 Messages use custom inbox cards and Pi’s native run preparation, without extra user-role wake messages. See [messaging behavior](docs/messaging.md).
 
 - **Herdr is required for Subs.** There is no headless fallback. Up to four Subs can be open at once, and Subs cannot delegate further.
+- **Subs cannot fork or clone.** `/fork` and `/clone` are cancelled in Sub tabs; Main sessions are unaffected.
 - **Profiles are not a sandbox.** Subs run as your OS user. A read-only role is not a filesystem permission boundary.
 - **MCP follows Pi's normal configuration.** Profiles select non-MCP tools; they do not isolate or filter MCP servers. Custom non-MCP tools must come from extensions already loaded in Main.
 - **Subs have separate conversations.** They receive their task, profile, and normal project context—not Main's chat history. Include the details they need in the task.
