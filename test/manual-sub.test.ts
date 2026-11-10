@@ -10,6 +10,7 @@ import { MainRunManager } from "../src/run-manager.js";
 import { recordSubSessionOwner, SUB_OWNER_ENTRY, SUB_SESSION_ID } from "../src/sessions.js";
 import { cleanSubFiles } from "../src/commands/clean-sub.js";
 import type { ResolvedProfile } from "../src/profiles/types.js";
+import { captureLaunchArgs, launchPathFromEnv } from "./fixtures/launch-script.js";
 
 let root: string;
 let previous: Record<string, string | undefined>;
@@ -34,34 +35,37 @@ function fixture() {
 	const profile: ResolvedProfile = { version: 1, name: "review", invocation: "manual", description: "Review a user-specified MR, not architecture consulting", sessionPersistence: "persistent", tools: ["read"], source: "global", sourcePath: "/tmp/review.json", resolvedSkills: [], resolvedExtensions: [] };
 	const starts: Array<{ args: string[]; session: SessionManager }> = [];
 	let channelDir = "";
+	let launcher = "";
 	let status = "idle";
 	let gone = false;
 	const exec = async (_command: string, args: string[]) => {
 		let payload: unknown = {};
 		if (args[0] === "tab" && args[1] === "create") {
 			channelDir = args.find((arg) => arg.startsWith("PI_SUBAGENT_CHANNEL="))!.slice("PI_SUBAGENT_CHANNEL=".length);
+			launcher = launchPathFromEnv(args);
 			payload = { tab: { tab_id: "tab" }, root_pane: { pane_id: "pane" } };
 		}
 		if (args[0] === "tab" && args[1] === "get") {
 			return gone ? { code: 1, killed: false, stdout: JSON.stringify({ error: { code: "tab_not_found" } }), stderr: "" }
 				: { code: 0, killed: false, stdout: JSON.stringify({ result: { tab: { tab_id: "tab" } } }), stderr: "" };
 		}
-		if (args[0] === "agent" && args[1] === "start") {
+		if (args[0] === "pane" && args[1] === "run") {
 			gone = false;
-			const resumeIndex = args.indexOf("--session");
-			const dirIndex = args.indexOf("--session-dir");
-			const directory = dirIndex >= 0 ? args[dirIndex + 1] : undefined;
+			const launchArgs = captureLaunchArgs(launcher);
+			const resumeIndex = launchArgs.indexOf("--session");
+			const dirIndex = launchArgs.indexOf("--session-dir");
+			const directory = dirIndex >= 0 ? launchArgs[dirIndex + 1] : undefined;
 			const manifest = readManifest(channelDir);
-			const sub = resumeIndex >= 0 ? SessionManager.open(args[resumeIndex + 1]!, directory)
-				: SessionManager.create(manifest.cwd, directory, { id: args[args.indexOf("--session-id") + 1]! });
+			const sub = resumeIndex >= 0 ? SessionManager.open(launchArgs[resumeIndex + 1]!, directory)
+				: SessionManager.create(manifest.cwd, directory, { id: launchArgs[launchArgs.indexOf("--session-id") + 1]! });
 			recordSubSessionOwner({ appendEntry: (type: string, data: unknown) => sub.appendCustomEntry(type, data) } as unknown as ExtensionAPI,
 				{ sessionManager: sub } as unknown as ExtensionContext, manifest.mainSessionId, manifest.mainSessionFile);
-			sub.appendSessionInfo(args[args.indexOf("--name") + 1]!);
+			sub.appendSessionInfo(launchArgs[launchArgs.indexOf("--name") + 1]!);
 			sub.appendMessage({ role: "user", content: "Fixture Sub task", timestamp: Date.now() });
 			writeSubSessionInfo(channelDir, readManifest(channelDir), { sessionId: sub.getSessionId(), sessionFile: sub.getSessionFile()! });
-			starts.push({ args, session: sub });
+			starts.push({ args: launchArgs, session: sub });
 		}
-		if (args[0] === "agent" && args[1] === "get") payload = { agent: { pane_id: "pane", tab_id: "tab", agent_status: gone ? "unknown" : status } };
+		if (args[0] === "agent" && args[1] === "get") payload = { agent: { agent: "pi", pane_id: "pane", tab_id: "tab", agent_status: gone ? "unknown" : status } };
 		return { code: 0, killed: false, stdout: JSON.stringify(payload), stderr: "" };
 	};
 	const attach = (main = SessionManager.create(root)) => {

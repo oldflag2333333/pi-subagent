@@ -2,10 +2,21 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { HerdrLaunchCleanupError, HerdrTabAdapter } from "../src/adapters/herdr.js";
 import type { SubLaunchSpec } from "../src/types.js";
+import { LAUNCH_COMMAND } from "../src/adapters/launch-script.js";
+import { captureLaunchArgs, launchPathFromEnv, readyAgent } from "./fixtures/launch-script.js";
+
+const channelDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-herdr-channel-"));
+const previousRuntime = process.env.XDG_RUNTIME_DIR;
+process.env.XDG_RUNTIME_DIR = channelDir;
+after(() => {
+	if (previousRuntime === undefined) delete process.env.XDG_RUNTIME_DIR;
+	else process.env.XDG_RUNTIME_DIR = previousRuntime;
+	fs.rmSync(channelDir, { recursive: true, force: true });
+});
 
 const spec: SubLaunchSpec = {
 	runId: "12345678-abcd-4000-8000-123456789abc",
@@ -17,7 +28,7 @@ const spec: SubLaunchSpec = {
 	sessionId: "sub-12345678-abcd-4000-8000-123456789abc",
 	sessionDir: "/tmp/native-sessions/--project--",
 	resumeSessionFile: "/tmp/native-sessions/--project--/saved.jsonl",
-	channelDir: "/tmp/channel",
+	channelDir,
 	token: "token",
 	entryPath: "/tmp/subagent.ts",
 	profile: {
@@ -36,10 +47,14 @@ test("fresh Subs use prefixed IDs and native storage while resumes preserve thei
 	const previous = process.env.HERDR_WORKSPACE_ID;
 	process.env.HERDR_WORKSPACE_ID = "w1";
 	const starts: string[][] = [];
+	let launcher = "";
 	const pi = { exec: async (_command: string, args: string[]) => {
-		if (args[1] === "create") return { code: 0, stdout: JSON.stringify({ tab: { tab_id: "tab" }, root_pane: { pane_id: "pane" } }), stderr: "", killed: false };
-		if (args[1] === "start") starts.push(args);
-		return { code: 0, stdout: "{}", stderr: "", killed: false };
+		if (args[1] === "create") {
+			launcher = launchPathFromEnv(args);
+			return { code: 0, stdout: JSON.stringify({ tab: { tab_id: "tab" }, root_pane: { pane_id: "pane" } }), stderr: "", killed: false };
+		}
+		if (args[0] === "pane" && args[1] === "run") starts.push(captureLaunchArgs(launcher));
+		return { code: 0, stdout: args[1] === "get" ? readyAgent() : "{}", stderr: "", killed: false };
 	} } as unknown as ExtensionAPI;
 	try {
 		const adapter = new HerdrTabAdapter(pi);
@@ -67,35 +82,77 @@ test("fresh Subs use prefixed IDs and native storage while resumes preserve thei
 	}
 });
 
-test("does not submit a long resume command until the shell readiness wait completes", async () => {
+test("launches long UTF-8 arguments through a fixed short command and waits for Pi before prompting", async () => {
 	const previous = process.env.HERDR_WORKSPACE_ID;
 	process.env.HERDR_WORKSPACE_ID = "w1";
 	const calls: string[][] = [];
+	const launchers: string[] = [];
+	const starts: string[][] = [];
 	let release!: () => void;
 	let observed!: () => void;
 	const waiting = new Promise<void>((resolve) => { observed = resolve; });
 	const gate = new Promise<void>((resolve) => { release = resolve; });
 	const pi = { exec: async (_command: string, args: string[]) => {
 		calls.push(args);
-		if (args[1] === "create") return { code: 0, stdout: JSON.stringify({ tab: { tab_id: "tab" }, root_pane: { pane_id: "pane" } }), stderr: "", killed: false };
-		if (args[1] === "wait-output") { observed(); await gate; }
-		return { code: 0, stdout: "{}", stderr: "", killed: false };
+		if (args[1] === "create") {
+			launchers.push(launchPathFromEnv(args));
+			return { code: 0, stdout: JSON.stringify({ tab: { tab_id: "tab" }, root_pane: { pane_id: "pane" } }), stderr: "", killed: false };
+		}
+		if (args[1] === "run") {
+			assert.equal(args[3], LAUNCH_COMMAND);
+			assert.ok(Buffer.byteLength(args[3]!) < 128);
+			starts.push(captureLaunchArgs(launchers.at(-1)!));
+		}
+		if (args[1] === "get") { observed(); await gate; }
+		return { code: 0, stdout: args[1] === "get" ? readyAgent() : "{}", stderr: "", killed: false };
 	} } as unknown as ExtensionAPI;
 	const sessionFile = `/saved sessions/${"历史".repeat(300)}/saved.jsonl`;
 	const adapter = new HerdrTabAdapter(pi);
 	const launched = adapter.launch({ ...spec, resumeSessionFile: sessionFile });
 	try {
 		await waiting;
-		assert.equal(calls.some((args) => args[1] === "start"), false);
+		assert.equal(calls.some((args) => args[1] === "prompt" || args[1] === "rename"), false);
+		assert.ok(Buffer.byteLength(starts[0]!.join(" ")) > 1024);
+		assert.equal(starts[0]![starts[0]!.indexOf("--session") + 1], sessionFile);
 		release();
 		await launched;
-		const start = calls.find((args) => args[1] === "start")!;
-		assert.ok(Buffer.byteLength(start.join(" ")) > 1024);
-		assert.equal(start[start.indexOf("--session") + 1], sessionFile);
-		// Each launch uses a new marker, even when restoring the same Sub.
 		await adapter.launch({ ...spec, resumeSessionFile: sessionFile });
-		const waits = calls.filter((args) => args[1] === "wait-output");
-		assert.notEqual(waits[0]![4], waits[1]![4]);
+		assert.notEqual(launchers[0], launchers[1], "Every launch has an exclusive file");
+		assert.equal(calls.some((args) => args[1] === "wait-output" || args[1] === "start"), false);
+		assert.deepEqual(fs.readdirSync(channelDir), []);
+	} finally {
+		release();
+		await launched.catch(() => {});
+		if (previous === undefined) delete process.env.HERDR_WORKSPACE_ID;
+		else process.env.HERDR_WORKSPACE_ID = previous;
+	}
+});
+
+test("keeps a queued launcher until Pi is ready, then removes it even without self-removal", async () => {
+	const previous = process.env.HERDR_WORKSPACE_ID;
+	process.env.HERDR_WORKSPACE_ID = "w1";
+	let launcher = "";
+	let release!: () => void;
+	let observed!: () => void;
+	const waiting = new Promise<void>((resolve) => { observed = resolve; });
+	const gate = new Promise<void>((resolve) => { release = resolve; });
+	const pi = { exec: async (_command: string, args: string[]) => {
+		if (args[1] === "create") {
+			launcher = launchPathFromEnv(args);
+			return { code: 0, stdout: JSON.stringify({ tab: { tab_id: "tab" }, root_pane: { pane_id: "pane" } }), stderr: "", killed: false };
+		}
+		if (args[1] === "get") { observed(); await gate; }
+		if (args[1] === "prompt") assert.equal(fs.existsSync(launcher), false);
+		return { code: 0, stdout: args[1] === "get" ? readyAgent() : "{}", stderr: "", killed: false };
+	} } as unknown as ExtensionAPI;
+	const launched = new HerdrTabAdapter(pi).launch(spec);
+	try {
+		await waiting;
+		assert.equal(fs.existsSync(launcher), true, "Admission is not execution");
+		assert.equal(fs.statSync(launcher).mode & 0o777, 0o600);
+		release();
+		await launched;
+		assert.equal(fs.existsSync(launcher), false);
 	} finally {
 		release();
 		await launched.catch(() => {});
@@ -133,7 +190,7 @@ test("rolls back every post-creation failure without reusing the cancelled signa
 	const previous = process.env.HERDR_WORKSPACE_ID;
 	process.env.HERDR_WORKSPACE_ID = "w1";
 	try {
-		for (const stage of ["run", "wait-output", "start", "report-metadata", "prompt"]) {
+		for (const stage of ["run", "get", "rename", "report-metadata", "prompt"]) {
 			for (const failure of ["exit", "throw", "killed", "abort"]) {
 				await t.test(`${stage}: ${failure}`, async () => {
 					const calls: Array<{ args: string[]; signal?: AbortSignal }> = [];
@@ -146,13 +203,14 @@ test("rolls back every post-creation failure without reusing the cancelled signa
 							if (failure === "abort") controller.abort(new Error("Cancelled"));
 							return { code: failure === "exit" ? 1 : 0, stdout: "{}", stderr: failure === "abort" ? "" : "Process failed", killed: failure === "killed" };
 						}
-						return { code: 0, stdout: "{}", stderr: "", killed: false };
+						return { code: 0, stdout: args[1] === "get" ? readyAgent() : "{}", stderr: "", killed: false };
 					} } as unknown as ExtensionAPI;
 					await assert.rejects(() => new HerdrTabAdapter(pi).launch(spec, controller.signal), /Process failed|Cancelled/);
 					assert.deepEqual(calls.at(-1), { args: ["tab", "close", "tab"], signal: undefined });
 					assert.equal(calls.filter((call) => call.args[1] === "close").length, 1);
-					if (stage === "run" || stage === "wait-output") {
-						assert.equal(calls.some((call) => call.args[1] === "start"), false);
+					assert.deepEqual(fs.readdirSync(channelDir), [], "Failure must remove the launcher");
+					if (stage === "run" || stage === "get") {
+						assert.equal(calls.some((call) => call.args[1] === "rename"), false);
 					}
 				});
 			}
@@ -233,67 +291,52 @@ test("close reports command failure instead of claiming success", async () => {
 	}
 });
 
-test("starts an idle Pi before submitting work through herdr agent prompt", async () => {
-	const previousEnvironment = process.env.HERDR_ENV;
+test("preserves Pi capabilities and marks and names the ready agent before submitting work", async () => {
 	const previousWorkspace = process.env.HERDR_WORKSPACE_ID;
 	const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 	const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-herdr-"));
 	const integration = path.join(agentDir, "extensions", "herdr-agent-state.ts");
 	fs.mkdirSync(path.dirname(integration), { recursive: true });
 	fs.writeFileSync(integration, "export default () => {}\n");
-	process.env.HERDR_ENV = "1";
 	process.env.HERDR_WORKSPACE_ID = "w1";
 	process.env.PI_CODING_AGENT_DIR = agentDir;
-	const calls: Array<{ command: string; args: string[] }> = [];
-	const fakePi = {
-		exec: async (command: string, args: string[]) => {
-			calls.push({ command, args });
-			if (args[0] === "tab" && args[1] === "create") {
-				return { code: 0, stdout: JSON.stringify({ result: { tab: { tab_id: "w1:t2" }, root_pane: { pane_id: "w1:p2" } } }), stderr: "", killed: false };
-			}
-			return { code: 0, stdout: "{}", stderr: "", killed: false };
-		},
-	} as unknown as ExtensionAPI;
+	const calls: string[][] = [];
+	let launcher = "";
+	let start: string[] = [];
+	const fakePi = { exec: async (_command: string, args: string[]) => {
+		calls.push(args);
+		if (args[1] === "create") {
+			launcher = launchPathFromEnv(args);
+			return { code: 0, stdout: JSON.stringify({ result: { tab: { tab_id: "w1:t2" }, root_pane: { pane_id: "w1:p2" } } }), stderr: "", killed: false };
+		}
+		if (args[1] === "run") start = captureLaunchArgs(launcher);
+		return { code: 0, stdout: args[1] === "get" ? readyAgent("w1:p2", "w1:t2") : "{}", stderr: "", killed: false };
+	} } as unknown as ExtensionAPI;
 	try {
 		const handle = await new HerdrTabAdapter(fakePi).launch(spec);
 		assert.deepEqual(handle, { adapter: "herdr", tabId: "w1:t2", paneId: "w1:p2" });
-		const probe = calls.find((call) => call.args[0] === "pane" && call.args[1] === "run");
-		const ready = calls.find((call) => call.args[0] === "pane" && call.args[1] === "wait-output");
-		assert.ok(probe);
-		assert.ok(ready);
-		const command = probe.args[3]!;
-		assert.match(command, /^echo pi-subagent-shell-ready-[a-f0-9-]+$/);
-		assert.ok(Buffer.byteLength(command) < 128);
-		const pattern = ready.args[ready.args.indexOf("--regex") + 1]!;
-		assert.equal(new RegExp(pattern).test(command), false, "The echoed probe is not proof of readiness");
-		assert.equal(new RegExp(pattern).test(command.slice("echo ".length)), true);
-		assert.equal(ready.args[ready.args.indexOf("--source") + 1], "recent-unwrapped");
-		assert.equal(ready.args[2], probe.args[2]);
-		const start = calls.find((call) => call.args[0] === "agent" && call.args[1] === "start");
-		const prompt = calls.find((call) => call.args[0] === "agent" && call.args[1] === "prompt");
-		assert.ok(start);
-		assert.ok(calls.indexOf(probe) < calls.indexOf(ready));
-		assert.ok(calls.indexOf(ready) < calls.indexOf(start));
-		assert.ok(prompt);
-		const metadata = calls.find((call) => call.args[0] === "pane" && call.args[1] === "report-metadata");
-		assert.equal(start.args.includes(spec.task), false);
-		assert.equal(start.args.includes(integration), true);
-		assert.equal(start.args.includes("--no-extensions"), true);
-		assert.ok(start.args.some((arg, index) => arg === "-e" && start.args[index + 1] === "npm:pi-model-calibration"));
-		assert.equal(start.args.includes("--no-session"), false);
-		assert.deepEqual(start.args.slice(start.args.indexOf("--session-dir"), start.args.indexOf("--session-dir") + 2), ["--session-dir", spec.sessionDir]);
-		assert.deepEqual(start.args.slice(start.args.indexOf("--session"), start.args.indexOf("--session") + 2), ["--session", spec.resumeSessionFile]);
-		assert.equal(start.args.includes("--approve"), true);
-		assert.equal(start.args.includes("--no-approve"), false);
-		assert.ok(metadata);
-		assert.equal(metadata.args.includes("subagent_role=sub"), true);
-		assert.equal(metadata.args.includes("subagent_main_session=main-session-1"), true);
-		assert.equal(prompt.args.includes(spec.task), true);
-		assert.ok(calls.indexOf(start) < calls.indexOf(metadata));
+		const rename = calls.find((args) => args[1] === "rename")!;
+		const metadata = calls.find((args) => args[1] === "report-metadata")!;
+		const prompt = calls.find((args) => args[1] === "prompt")!;
+		assert.equal(start.includes(spec.task), false);
+		assert.equal(start.includes(integration), true);
+		assert.equal(start.includes("--no-extensions"), true);
+		assert.ok(start.some((arg, index) => arg === "-e" && start[index + 1] === "npm:pi-model-calibration"));
+		assert.equal(start.includes("--no-session"), false);
+		assert.deepEqual(start.slice(start.indexOf("--session-dir"), start.indexOf("--session-dir") + 2), ["--session-dir", spec.sessionDir]);
+		assert.deepEqual(start.slice(start.indexOf("--session"), start.indexOf("--session") + 2), ["--session", spec.resumeSessionFile]);
+		assert.equal(start.includes("--approve"), true);
+		assert.equal(start.includes("--no-approve"), false);
+		assert.equal(metadata.includes("subagent_role=sub"), true);
+		assert.equal(metadata.includes("subagent_main_session=main-session-1"), true);
+		assert.equal(rename[2], handle.paneId);
+		assert.equal(prompt[2], rename[3]);
+		assert.equal(prompt.includes(spec.task), true);
+		assert.ok(calls.findIndex((args) => args[1] === "get") < calls.indexOf(rename));
+		assert.ok(calls.indexOf(rename) < calls.indexOf(metadata));
 		assert.ok(calls.indexOf(metadata) < calls.indexOf(prompt));
+		assert.equal(fs.existsSync(launcher), false);
 	} finally {
-		if (previousEnvironment === undefined) delete process.env.HERDR_ENV;
-		else process.env.HERDR_ENV = previousEnvironment;
 		if (previousWorkspace === undefined) delete process.env.HERDR_WORKSPACE_ID;
 		else process.env.HERDR_WORKSPACE_ID = previousWorkspace;
 		if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;

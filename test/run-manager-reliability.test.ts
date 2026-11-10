@@ -7,6 +7,7 @@ import { SessionManager, type ExtensionAPI, type ExtensionContext } from "@earen
 import { createChannel, listTalkToMain, readManifest, talkToMain, writeSubClosed } from "../src/channel.js";
 import { MainRunManager, RUN_ENTRY } from "../src/run-manager.js";
 import type { RunSnapshot } from "../src/types.js";
+import { readyAgent } from "./fixtures/launch-script.js";
 
 let root: string;
 let previous: Record<string, string | undefined>;
@@ -40,7 +41,7 @@ function fixture() {
 			if (idle) session.appendCustomMessageEntry(message.customType, message.content, message.display, message.details);
 			else queued.push(message);
 		},
-		exec: async (_command: string, args: string[]) => ({ code: 0, killed: false, stderr: "", stdout: args[1] === "create" ? JSON.stringify({ tab: { tab_id: "tab" }, root_pane: { pane_id: "pane" } }) : "{}" }),
+		exec: async (_command: string, args: string[]) => ({ code: 0, killed: false, stderr: "", stdout: args[1] === "create" ? JSON.stringify({ tab: { tab_id: "tab" }, root_pane: { pane_id: "pane" } }) : args[1] === "get" ? readyAgent() : "{}" }),
 	} as unknown as ExtensionAPI;
 	const ctx = { model: {}, signal: new AbortController().signal, cwd: root, sessionManager: session, isIdle: () => idle, hasPendingMessages: () => false, isProjectTrusted: () => true, hasUI: true,
 		ui: { notify: (message: string) => warnings.push(message) },
@@ -180,7 +181,7 @@ test("launch rollback failure remains addressable through close_sub", async () =
 	const exec = f.pi.exec;
 	let closeFailed = true;
 	f.pi.exec = async (command, args, options) => {
-		if (args[1] === "start") throw new Error("Launch failed");
+		if (args[1] === "run") throw new Error("Launch failed");
 		if (args[1] === "close" && closeFailed) return { code: 1, killed: false, stdout: "", stderr: "Close failed" };
 		return exec(command, args, options);
 	};
