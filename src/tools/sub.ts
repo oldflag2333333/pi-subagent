@@ -183,12 +183,16 @@ export function registerSub(pi: ExtensionAPI): void {
 		name: "talk",
 		label: "talk",
 		exposure: "model-only",
-		description: "Send one message to the Main Pi and end the current turn. Use it to ask for information or deliver work. Format non-trivial messages as readable Markdown with paragraph breaks and lists.",
-		promptSnippet: "Send a message to the Main Pi",
-		promptGuidelines: ["Use talk whenever the Sub needs to communicate with the Main; the Main decides when to close the Sub session."],
+		description: "Send one message to the Main Pi. Continue working by default; set endTurn=true only when the task is complete or you must wait for Main's reply. Format non-trivial messages as readable Markdown with paragraph breaks and lists.",
+		promptSnippet: "Send a message to the Main Pi, optionally ending the current turn",
+		promptGuidelines: [
+			"Use talk for progress updates, questions, and completed work. After progress updates, continue the task without waiting for an acknowledgement.",
+			"Set talk endTurn=true only when the task is complete or you must wait for Main's reply. Call terminating talk on its own, without other tools in the same batch. The Main decides when to close the Sub session.",
+		],
 		executionMode: "sequential",
 		parameters: Type.Object({
 			message: Type.String({ description: "Message to the other Agent. For non-trivial content, use readable Markdown with paragraph breaks and lists." }),
+			endTurn: Type.Optional(Type.Boolean({ description: "End the current turn after sending. Defaults to false: continue working. Set true only when the task is complete or you must wait for Main's reply." })),
 		}),
 		renderCall(args, theme, context) {
 			const message = typeof args.message === "string" ? args.message : "";
@@ -205,7 +209,7 @@ export function registerSub(pi: ExtensionAPI): void {
 			return {
 				content: [{ type: "text", text: "Message queued for the Main Pi." }],
 				details: { messageId: message.id },
-				terminate: true,
+				terminate: params.endTurn === true,
 			};
 		},
 		renderResult(result, _options, theme, context) {

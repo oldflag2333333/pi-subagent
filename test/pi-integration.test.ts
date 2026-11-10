@@ -231,6 +231,7 @@ test("Main delegate stays directly active but is not callable from nested tools"
 		assert.ok(session.getActiveToolNames().includes("delegate"));
 		assert.equal(session.getCallableToolNames().includes("delegate"), false);
 		assert.ok(session.getCallableToolNames().includes("talk"));
+		assert.match(session.getToolDefinition("talk")?.promptGuidelines?.join("\n") ?? "", /progress updates/);
 		assert.ok(session.getCallableToolNames().includes("list_sub"));
 		const nested = await issueCall(session, "nested_probe", { target: "delegate" });
 		assert.deepEqual(nested.details, { isError: true });
@@ -386,7 +387,7 @@ test("Sub startup uses Pi tool selection to keep the registry and Codemode conte
 		assert.deepEqual(nestedTalk.details, { isError: true });
 		assert.deepEqual(listTalkToMain(channel.channelDir, readManifest(channel.channelDir)), []);
 		const directTalk = await issueCall(session, "talk", { message: "Delivery" });
-		assert.equal(directTalk.terminate, true);
+		assert.equal(directTalk.terminate, false);
 		assert.equal(listTalkToMain(channel.channelDir, readManifest(channel.channelDir)).length, 1);
 		const allowed = await issueCall(session, "nested_probe", { target: "allowed" });
 		assert.deepEqual(allowed.details, { isError: false });

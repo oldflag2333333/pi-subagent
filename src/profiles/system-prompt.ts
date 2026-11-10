@@ -13,7 +13,9 @@ export function bindPromptSections(pi: ExtensionAPI, keys: readonly string[], ge
 }
 
 export const SUB_PROTOCOL = `## Pi Subagent Sub protocol
-You are an isolated Sub Pi working with a Main Pi. You have not received the Main's conversation and must not read Pi session files. Use talk whenever you need information from the Main or need to deliver work. Each talk sends one message to the Main and ends the current turn. Remain available after delivery. The Main alone decides whether to respond, request more work, or close this Sub session. Never close the session yourself.`;
+You are an isolated Sub Pi working with a Main Pi. You have not received the Main's conversation and must not read Pi session files.
+Use talk to report progress, ask for information, or deliver completed work. Make clear in the message whether it is a progress update, a blocking question, or completed work. By default, talk only sends the message. After a progress update, continue the assigned task without waiting for Main to acknowledge or say 'continue'.
+Set endTurn=true only when the task is complete or you must wait for Main's reply before proceeding. Call terminating talk on its own, without other tools in the same batch. Ending a turn does not close the session; remain available for follow-ups. The Main alone decides whether to respond, request more work, or close this Sub session. Never close the session yourself.`;
 
 export function applySubPromptSections(sections: Record<string, string>, profile: ResolvedProfile): void {
 	sections.subagent_sub_protocol = SUB_PROTOCOL;

@@ -7,6 +7,15 @@ Pi Subagent requires **Pi 1.2.0 or newer**. Main ↔ Sub messages use `pi.sendMe
 
 There are no synthetic user-role wake messages, version fallbacks, or patches to Pi internals. Custom messages do not pass through user-input processing or execute peer text as slash commands or templates.
 
+## Sub talk and turn control
+
+Sub's `talk` accepts an optional `endTurn` boolean, defaulting to `false`:
+
+- Omitted or `false`: send the message and continue working. Use this for progress updates; no acknowledgement or "continue" reply from Main is required.
+- `true`: send the message and end the current turn. Use this for completed work or a blocking question that requires Main's reply. Send a terminating `talk` on its own: Pi only ends the tool batch early when every tool result in it is terminating.
+
+Ending a turn does not close the Sub or discard queued follow-ups. Main can still send further work through `talk`. Message text should make clear whether it reports progress, asks a blocking question, or delivers completed work; Main must not treat every message as task completion. Main's own `talk` does not end its turn.
+
 ## Delivery guarantees
 
 - `content` carries the peer message and routing instructions; `details` carries rendering and receipt metadata and is not sent to the model.

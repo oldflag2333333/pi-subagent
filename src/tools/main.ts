@@ -58,7 +58,7 @@ export function registerMainTools(pi: ExtensionAPI, manager: MainRunManager): vo
 			"Use delegate for work assigned by MAIN.md or a separable task that benefits from an independent context; select an explicitly configured profile and provide a short informative title.",
 			"After delegate launches, do not wait or repeatedly poll. Pi Subagent will wake the Main when the Sub uses talk.",
 			"For Subs labeled user-invoked specialists, follow up only on the user's task and results. Do not assign unrelated work or substitute them for general consulting profiles. New tasks are initiated by the user through a profile command.",
-			"Use talk to respond to an existing Sub, interrupt_sub to stop its current turn without closing it, and close_sub only after its delivery is accepted or the user asks to close it.",
+			"Use talk to respond to an existing Sub, interrupt_sub to stop its current turn without closing it, and close_sub only after its completed work is accepted or the user asks to close it.",
 		],
 		parameters: Type.Object({
 			title: Type.String({ description: "Short Herdr tab title, up to 48 displayed characters." }),
@@ -131,6 +131,7 @@ export function registerMainTools(pi: ExtensionAPI, manager: MainRunManager): vo
 		label: "talk",
 		description: "Send one message to an existing Sub Pi. Messages enter the Sub's native follow-up queue and are processed after its current work. Format non-trivial messages as readable Markdown with paragraph breaks and lists.",
 		promptSnippet: "Send a message to an existing Sub Pi",
+		promptGuidelines: ["Sub talk messages may be progress updates while the Sub keeps working. Do not send routine 'continue' replies or close a Sub merely for reporting progress; respond with talk when input is needed, and use close_sub only after completed work is accepted or the user asks to close it."],
 		executionMode: "sequential",
 		parameters: Type.Object({
 			runId: Type.String({ description: "Full Sub run ID or a unique prefix." }),
