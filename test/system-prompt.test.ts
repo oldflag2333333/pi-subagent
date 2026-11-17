@@ -63,6 +63,21 @@ test("adds the mandatory Sub protocol and profile instructions without Main cont
 	});
 });
 
+test("Sub protocol limits unsolicited reports while preserving actionable communication and continuation", () => {
+	assert.match(SUB_PROTOCOL, /Work quietly by default/);
+	assert.match(SUB_PROTOCOL, /deliver completed work/);
+	assert.match(SUB_PROTOCOL, /blocker or question that requires Main's input/);
+	assert.match(SUB_PROTOCOL, /material change that affects Main's decisions or coordination/);
+	assert.match(SUB_PROTOCOL, /answer an explicit status request/);
+	assert.match(SUB_PROTOCOL, /Do not send routine acknowledgements, startup or preflight notices, step-by-step progress, or unchanged polling status/);
+	assert.match(SUB_PROTOCOL, /Combine related findings/);
+	assert.match(SUB_PROTOCOL, /latest instructions already available/);
+	assert.match(SUB_PROTOCOL, /do not repeat an unchanged result/);
+	assert.match(SUB_PROTOCOL, /whether Main needs to act and whether you are continuing, blocked, or finished/);
+	assert.match(SUB_PROTOCOL, /After a necessary progress update, continue/);
+	assert.match(SUB_PROTOCOL, /endTurn=true only when the task is complete or you must wait for Main's reply/);
+});
+
 test("a Sub without profile instructions still gets its protocol and no stale instructions", () => {
 	const sections: Record<string, string> = { ...nativeSections, subagent_profile: "Old instructions" };
 	applySubPromptSections(sections, profile({ instructions: undefined }));

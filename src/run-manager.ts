@@ -435,7 +435,7 @@ export class MainRunManager {
 				const messages = listTalkToMain(run.channelDir, manifest);
 				let pending = messages.length;
 				for (const message of messages) {
-					const content = `[Pi Subagent Sub message]${run.origin === "manual" ? `\n[User-invoked specialist: ${run.profileName}]\n${run.purpose ? `Purpose: ${run.purpose}\n` : ""}${MANUAL_MAIN_GUIDANCE}` : ""}\nSub '${run.title}' (${run.runId}) says:\n${message.message}\n\n${run.closedAt === undefined ? `Use talk with runId '${run.runId}' to respond, or close_sub when the delivery is accepted and no more work is needed.` : "This Sub has already closed; this is a retained final delivery."}`;
+					const content = `[Pi Subagent Sub message]${run.origin === "manual" ? `\n[User-invoked specialist: ${run.profileName}]\n${run.purpose ? `Purpose: ${run.purpose}\n` : ""}${MANUAL_MAIN_GUIDANCE}` : ""}\nSub '${run.title}' (${run.runId}) says:\n${message.message}\n\n${run.closedAt === undefined ? `Reply with talk using runId '${run.runId}' only when input or follow-up work is needed; routine progress needs no reply or user-facing restatement. Use close_sub only after completed work is accepted and no more work is needed.` : "This Sub has already closed; this is a retained final delivery."}`;
 					const result = deliverTalk(this.pi, ctx, run.channelDir, manifest, "to-main", message, content);
 					if (result === "acknowledged") pending--;
 				}

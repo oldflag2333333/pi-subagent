@@ -111,6 +111,16 @@ for (const endTurn of [undefined, false, true]) {
 		const protocol = getCurrentSystemMessage(f.requests[0]!.messages)?.sections?.subagent_sub_protocol ?? "";
 		assert.match(protocol, /endTurn=true/);
 		assert.match(protocol, /progress update.*continue/i);
+		assert.match(protocol, /Work quietly by default/);
+		const talk = session!.getToolDefinition("talk");
+		assert.match(talk?.description ?? "", /Do not send routine progress or acknowledgements/);
+		const guidelines = talk?.promptGuidelines?.join("\n") ?? "";
+		assert.match(guidelines, /Use talk only for completed work, blockers or questions requiring Main's input/);
+		assert.match(guidelines, /explicitly requested status/);
+		assert.match(guidelines, /no routine acknowledgements/);
+		assert.match(guidelines, /unchanged polling status/);
+		const rules = getCurrentSystemMessage(f.requests[0]!.messages)?.sections?.rules ?? "";
+		assert.ok(rules.includes(talk!.promptGuidelines![0]!), "Quiet reporting guidance must reach the model, not only the tool metadata");
 
 		// A normal Main follow-up must still wake the same Sub after explicit termination.
 		if (!endTurn) calls.push(work, delivery);

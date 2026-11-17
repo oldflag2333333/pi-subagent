@@ -131,7 +131,11 @@ export function registerMainTools(pi: ExtensionAPI, manager: MainRunManager): vo
 		label: "talk",
 		description: "Send one message to an existing Sub Pi. Messages enter the Sub's native follow-up queue and are processed after its current work. Format non-trivial messages as readable Markdown with paragraph breaks and lists.",
 		promptSnippet: "Send a message to an existing Sub Pi",
-		promptGuidelines: ["Sub talk messages may be progress updates while the Sub keeps working. Do not send routine 'continue' replies or close a Sub merely for reporting progress; respond with talk when input is needed, and use close_sub only after completed work is accepted or the user asks to close it."],
+		promptGuidelines: [
+			"Sub talk messages may be progress updates while the Sub keeps working. For routine progress that needs no action, do not reply with talk or restate it to the user. Continue your own work; if there is nothing else to do, end the turn without a user-facing message.",
+			"Summarize Sub talk messages for the user only when there is completed work, a material blocker or change affecting the outcome, a decision for the user, or an explicit request for status. Consolidate related updates rather than forwarding each message.",
+			"Respond with talk when the Sub needs input or follow-up work, not with routine acknowledgements or 'continue' replies. Compare a stale report with instructions you have already sent before resending them. Do not close a Sub merely for reporting progress; use close_sub only after completed work is accepted or the user asks to close it.",
+		],
 		executionMode: "sequential",
 		parameters: Type.Object({
 			runId: Type.String({ description: "Full Sub run ID or a unique prefix." }),

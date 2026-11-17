@@ -231,7 +231,14 @@ test("Main delegate stays directly active but is not callable from nested tools"
 		assert.ok(session.getActiveToolNames().includes("delegate"));
 		assert.equal(session.getCallableToolNames().includes("delegate"), false);
 		assert.ok(session.getCallableToolNames().includes("talk"));
-		assert.match(session.getToolDefinition("talk")?.promptGuidelines?.join("\n") ?? "", /progress updates/);
+		const guidelines = session.getToolDefinition("talk")?.promptGuidelines?.join("\n") ?? "";
+		assert.match(guidelines, /progress updates/);
+		assert.match(guidelines, /do not reply with talk or restate it to the user/);
+		assert.match(guidelines, /end the turn without a user-facing message/);
+		assert.match(guidelines, /completed work, a material blocker or change affecting the outcome, a decision for the user, or an explicit request for status/);
+		assert.match(guidelines, /Consolidate related updates/);
+		assert.match(guidelines, /Compare a stale report with instructions you have already sent/);
+		assert.match(guidelines, /use close_sub only after completed work is accepted or the user asks to close it/);
 		assert.ok(session.getCallableToolNames().includes("list_sub"));
 		const nested = await issueCall(session, "nested_probe", { target: "delegate" });
 		assert.deepEqual(nested.details, { isError: true });

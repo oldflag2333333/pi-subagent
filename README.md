@@ -77,7 +77,7 @@ Ask the reviewer profile to review src/auth for bugs and missing tests.
 | Finish with a specialist | Ask Pi to close the Sub, or close its Herdr tab |
 | Remove Sub sessions and communication files left by deleted Mains | `/clean-sub` |
 
-Within the same Main session, repeated `/sub:reviewer` commands reuse that profile's open Sub. If it is busy, your next task is queued. Finishing a task does not automatically close the tab. Subs can report progress through `talk` without stopping; `endTurn: true` explicitly ends their current turn when finished or waiting for Main.
+Within the same Main session, repeated `/sub:reviewer` commands reuse that profile's open Sub. If it is busy, your next task is queued. Finishing a task does not automatically close the tab. Subs are instructed to work quietly and use `talk` for completed work, blockers needing Main's input, material changes affecting decisions or coordination, and explicitly requested status—not routine acknowledgements or step-by-step progress. Main is instructed not to reply to or relay routine progress that needs no action. These are prompt-level rules, not message filtering: every sent `talk` still wakes or queues work for its recipient. A necessary progress report does not stop the Sub; `endTurn: true` explicitly ends its current turn when finished or waiting for Main.
 
 The **Sub-agents** list shows only assistants created by the current Main: all **Open** Subs (including idle or unknown status) and **Resumable** persistent sessions confirmed closed with saved files still available. Other Main sessions and forks do not inherit them or gain access to resume them. Reloading or resuming the same Main preserves ownership.
 

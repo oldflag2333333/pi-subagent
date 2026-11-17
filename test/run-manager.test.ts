@@ -171,6 +171,9 @@ test("queues a Sub message while Main is busy and acknowledges its receipt witho
 	assert.deepEqual(notification.options, { deliverAs: "followUp", triggerTurn: true });
 	const delivered = notification.message as any;
 	assert.match(delivered.content, /Review complete\./);
+	assert.match(delivered.content, /Reply with talk using runId 'open-run' only when input or follow-up work is needed/);
+	assert.match(delivered.content, /routine progress needs no reply or user-facing restatement/);
+	assert.match(delivered.content, /Use close_sub only after completed work is accepted/);
 	assert.equal(delivered.display, true);
 	assert.deepEqual(delivered.details, { title: run.title, message: "Review complete.", direction: "to-main", runId: run.runId, messageId: sent.id });
 	assert.deepEqual(listTalkToMain(run.channelDir, readManifest(run.channelDir)), []);

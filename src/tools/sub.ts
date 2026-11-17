@@ -183,10 +183,11 @@ export function registerSub(pi: ExtensionAPI): void {
 		name: "talk",
 		label: "talk",
 		exposure: "model-only",
-		description: "Send one message to the Main Pi. Continue working by default; set endTurn=true only when the task is complete or you must wait for Main's reply. Format non-trivial messages as readable Markdown with paragraph breaks and lists.",
+		description: "Send a concise result, blocker, decision-relevant change, or explicitly requested status to the Main Pi. Do not send routine progress or acknowledgements. Continue working by default; set endTurn=true only when the task is complete or you must wait for Main's reply. Format non-trivial messages as readable Markdown with paragraph breaks and lists.",
 		promptSnippet: "Send a message to the Main Pi, optionally ending the current turn",
 		promptGuidelines: [
-			"Use talk for progress updates, questions, and completed work. After progress updates, continue the task without waiting for an acknowledgement.",
+			"Use talk only for completed work, blockers or questions requiring Main's input, material changes affecting Main's decisions or coordination, or explicitly requested status. Work quietly otherwise: no routine acknowledgements, startup or preflight notices, step-by-step progress, or unchanged polling status. Combine related findings; do not repeat an unchanged result in response to older follow-ups.",
+			"After a necessary talk progress update, continue the task without waiting for an acknowledgement.",
 			"Set talk endTurn=true only when the task is complete or you must wait for Main's reply. Call terminating talk on its own, without other tools in the same batch. The Main decides when to close the Sub session.",
 		],
 		executionMode: "sequential",
