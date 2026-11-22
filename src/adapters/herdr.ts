@@ -35,7 +35,7 @@ function agentName(runId: string): string {
 	return `sub-${runId.toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 20)}`;
 }
 
-function subArgs(spec: SubLaunchSpec): string[] {
+export function subArgs(spec: SubLaunchSpec): string[] {
 	const herdrIntegration = path.join(getAgentDir(), "extensions", "herdr-agent-state.ts");
 	return [
 		"--no-extensions",

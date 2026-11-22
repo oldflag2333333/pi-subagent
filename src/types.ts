@@ -65,6 +65,9 @@ export type SubAgentStatus = "working" | "blocked" | "idle" | "unknown";
 
 export interface SurfaceHandle {
 	adapter: "herdr";
+	/** Missing on legacy Herdr snapshots. */
+	backend?: "core";
+	terminalId?: string;
 	tabId?: string;
 	paneId?: string;
 }

@@ -8,7 +8,11 @@ A **profile** defines a specialist's instructions, tools, and optional skills or
 
 ## Install
 
-You need **Node.js 22.19+**, **[Pi](https://pi.dev) 1.2.0+**, and **Herdr**. To launch specialists, run Pi inside a Herdr workspace with the `herdr` command available.
+You need **Node.js 22.19+**, **[Pi](https://pi.dev) 1.2.0+**, and **Herdr**. Backend selection is automatic: legacy workspaces use `herdr`; newer terminals use `herdr-core` (requires Pi's native OSC 7501 reporting, verified with Pi 1.6.0).
+
+In **Herdr Desktop / herdr-core**, Subs are native children of Main and appear beneath it in the Agents sidebar, without a separate tab or focus change. Click a Sub to inspect/take over, or keep it as a pane. Profiles, delegation, talk, interruption, closing, and persistent session resume keep their existing interfaces. Closing a Sub never closes Main's tab. Legacy Herdr still uses separate tabs.
+
+Core Subs first open the normal interactive shell configured in herdr-core in the target working directory, then submit the private launcher through terminal input. No `shell -c` bypasses the first prompt, so prompt hooks (including direnv) initialize the project environment naturally. There is no direnv/Nix-specific logic, copying of Main's environment, or automatic authorization; configuration and loading behavior follow the user's normal shell. Only a short quoted launcher path crosses the PTY; Pi arguments and Sub credentials stay in the private script.
 
 ```bash
 pi install npm:@oldflag2333333/pi-subagent
@@ -197,7 +201,7 @@ The script unlinks itself after the shell opens it; Main also removes it once Pi
 
 If a profile is missing or fails to start, run `/profiles` first. Check its directory/name match, project trust, and any referenced tools, skills, or extensions. If Herdr is unavailable, confirm Pi is running inside a Herdr workspace.
 
-To hide or show Pi Subagent Subs in Herdr's Agents panel, see the optional [Herdr companion plugin](herdr-plugin/README.md).
+For legacy Herdr only, the optional [Herdr companion plugin](herdr-plugin/README.md) hides/shows Subs in its Agents panel. Herdr Desktop uses native parent/child rows instead; it needs no companion plugin.
 
 ## Development
 

@@ -8,7 +8,11 @@
 
 ## 安装
 
-需要 **Node.js 22.19+**、**[Pi](https://pi.dev) 1.2.0+** 和 **Herdr**。启动助手时，Pi 必须运行在 Herdr 工作区中，并且能调用 `herdr` 命令。
+需要 **Node.js 22.19+**、**[Pi](https://pi.dev) 1.2.0+** 和 **Herdr**。自动识别运行环境：旧版使用 `herdr`；新版使用 `herdr-core`（Pi 需支持原生 OSC 7501 状态上报，已验证 1.6.0）。
+
+在 **Herdr Desktop / herdr-core** 中，Sub 通过原生 `parent` 关系挂在 Main 下，显示在 Agents 侧栏主 Agent 的下方，不创建独立标签页、不抢焦点。点击 Sub 可查看或接管，也可将它固定为 pane。现有 profile、委派、talk、中断、关闭和持久会话恢复方式不变；关闭 Sub 不会关闭 Main 的标签页。旧版 Herdr 仍使用独立标签页。
+
+新版 Sub 先在目标工作目录启动 herdr-core 配置的普通交互式 shell（与手动打开终端一致），再通过终端输入执行私有启动脚本。不使用 `shell -c` 绕过首次提示符，因此 direnv 等提示符钩子可自然加载项目环境；插件不包含 direnv/Nix 专用逻辑，不复制 Main 环境，也不修改用户授权。配置和加载结果遵循用户 shell 的正常行为。终端只输入经过转义的短脚本路径，Pi 参数与 Sub 通信凭据仍留在私有脚本内。
 
 ```bash
 pi install npm:@oldflag2333333/pi-subagent
@@ -197,7 +201,7 @@ reviewer/
 
 如果找不到角色或启动失败，先运行 `/profiles`，检查目录名与 `name` 是否一致、项目是否受信任，以及引用的工具、技能和扩展是否可用。如果提示 Herdr 不可用，请确认 Pi 正在 Herdr 工作区内运行。
 
-如需在 Herdr 的 Agents 面板中隐藏或显示 Pi Subagent 子助手，可安装可选的 [Herdr 配套插件](herdr-plugin/README.md)（英文说明）。
+旧版 Herdr 如需隐藏或显示子助手，可安装可选的 [Herdr 配套插件](herdr-plugin/README.md)（英文说明）。新版 Herdr Desktop 使用原生父子列表，不需要此配套插件。
 
 ## 开发
 
